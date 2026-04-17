@@ -1,0 +1,6 @@
+# Secrets
+.env
+
+# Clutter
+target/
+.settings/

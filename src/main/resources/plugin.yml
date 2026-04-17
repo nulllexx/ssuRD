@@ -1,0 +1,136 @@
+name: ServerSideUtils
+version: 11.1
+main: org.raindrippy.serversideutils.Main
+api-version: 1.21
+depend: [Vault]
+
+commands:
+  eventhub:
+    description: Teleports a player to the event hub.
+    usage: /eventhub
+    permission: serversideutils.eventhub
+
+  return:
+    description: Teleports a player to the main world.
+    usage: /return
+    permission: serversideutils.return
+
+  togglescoreboard:
+    description: Toggles the balance scoreboard
+    usage: /togglescoreboard
+    permission: serversideutils.togglescoreboard
+
+  sendmoney:
+    description: Send money to the specified player
+    usage: /sendmoney <player> <amount>
+    permission: serversideutils.sendmoney
+
+  warn:
+    description: Warn a player with a reason.
+    usage: /warn <player> <reason>
+    permission: serversideutils.warn
+
+  getwarnings:
+    description: Show all warnings of a player.
+    usage: /getwarnings <player>
+    permission: serversideutils.getwarnings
+
+  removewarning:
+    description: Remove a specific warning from a player.
+    usage: /removewarning <player> <number>
+    permission: serversideutils.removewarning
+
+  clearwarnings:
+    description: Clear all warnings from a player.
+    usage: /clearwarnings <player>
+    permission: serversideutils.clearwarnings
+
+  owarn:
+    description: Offline warn.
+    usage: /owarn <player> <reason>
+    permission: serversideutils.warn
+
+  oclearwarnings:
+    description: Clear offline warnings.
+    usage: /oclearwarnings <player>
+    permission: serversideutils.clearwarnings
+
+  oremovewarning:
+    description: Remove specific offline warning.
+    usage: /oremovewarning <player> <number>
+    permission: serversideutils.removewarning
+
+  setcounter:
+    description: Set the player tracking state.
+    usage: /setcounter <true|false>
+    permission: serversideutils.setcounter
+
+  lsrev:
+    description: Set LifeSteal auto-revive system.
+    usage: /lsrev <true|false>
+    permission: serversideutils.lsrev
+
+  sync:
+    description: Mandatory RainDrippy account sync setup
+    usage: /sync <username> <password>
+    permission: serversideutils.sync
+
+permissions:
+  serversideutils.*:
+    description: Gives access to all ServerSideUtils commands
+    children:
+      serversideutils.eventhub: true
+      serversideutils.return: true
+      serversideutils.togglescoreboard: true
+      serversideutils.sendmoney: true
+      serversideutils.warn: true
+      serversideutils.getwarnings: true
+      serversideutils.removewarning: true
+      serversideutils.clearwarnings: true
+      serversideutils.setcounter: true
+      serversideutils.lsrev: true
+      serversideutils.sync: true
+
+  serversideutils.eventhub:
+    description: Allows use of /eventhub
+    default: true
+
+  serversideutils.return:
+    description: Allows use of /return
+    default: true
+
+  serversideutils.togglescoreboard:
+    description: Allows toggling scoreboard
+    default: true
+
+  serversideutils.sendmoney:
+    description: Allows sending money to other players
+    default: true
+
+  serversideutils.sync:
+    description: Allows use of /sync
+    default: true
+
+  serversideutils.warn:
+    description: Allows issuing player warnings
+    default: op
+
+  serversideutils.getwarnings:
+    description: Allows viewing player warnings
+    default: op
+
+  serversideutils.removewarning:
+    description: Allows removing player warnings
+    default: op
+
+  serversideutils.clearwarnings:
+    description: Allows clearing all player warnings
+    default: op
+
+  serversideutils.setcounter:
+    description: Allows use of /setcounter
+    default: op
+
+  serversideutils.lsrev:
+    description: Allows use of /lsrev
+    default: op
