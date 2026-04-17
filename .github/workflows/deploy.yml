@@ -37,6 +37,7 @@ jobs:
         host: ${{ secrets.SSH_HOST }}
         username: ${{ secrets.SSH_USERNAME }}
         key: ${{ secrets.SSH_KEY }}
+        port: 2222
         source: "target/ServerUtils-11.1.jar"
         target: "/home/useradmin/mcserver/plugins/"
         strip_components: 1
@@ -47,6 +48,7 @@ jobs:
         host: ${{ secrets.SSH_HOST }}
         username: ${{ secrets.SSH_USERNAME }}
         key: ${{ secrets.SSH_KEY }}
+        port: 2222
         script: |
           cd /home/useradmin/docker
           docker compose restart minecraft
