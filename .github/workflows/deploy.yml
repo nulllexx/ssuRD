@@ -3,6 +3,12 @@ name: Java CI with Maven & Deploy
 on:
   push:
     branches: [ "master", "main" ]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: true
+        default: 'master'
 
 jobs:
   build-and-deploy:
