@@ -1,5 +1,5 @@
 name: ServerSideUtils
-version: 11.1
+version: 11.2
 main: org.raindrippy.serversideutils.Main
 api-version: 1.21
 depend: [Vault]

@@ -1,21 +1,32 @@
-name: Java CI with Maven & Deploy
+name: Deploy to Minecraft Server
 
 on:
-  push:
-    branches: [ "master", "main" ]
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch to deploy'
+        description: 'Branch (or tag/SHA) to deploy'
         required: true
-        default: 'master'
+        default: 'main'
+      confirm:
+        description: 'Type "deploy" to confirm a production deploy'
+        required: true
+        default: ''
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Validate confirmation
+      run: |
+        if [ "${{ inputs.confirm }}" != "deploy" ]; then
+          echo "::error::You must type 'deploy' in the confirm field to proceed."
+          exit 1
+        fi
+
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.branch }}
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
@@ -25,24 +36,53 @@ jobs:
         cache: maven
 
     - name: Create .env file
-      run: |
-        echo "AES_KEY=${{ secrets.AES_KEY }}" > .env
+      run: echo "AES_KEY=${{ secrets.AES_KEY }}" > .env
 
     - name: Build with Maven
       run: mvn -B clean package --file pom.xml
 
-    - name: Copy JAR to Remote Server
+    - name: Resolve built JAR path
+      id: jar
+      run: |
+        JAR_PATH=$(ls target/ServerUtils-*.jar | grep -v original- | head -n1)
+        if [ -z "$JAR_PATH" ]; then
+          echo "::error::No built JAR found in target/"
+          exit 1
+        fi
+        echo "path=$JAR_PATH" >> "$GITHUB_OUTPUT"
+        echo "name=$(basename $JAR_PATH)" >> "$GITHUB_OUTPUT"
+
+    - name: Back up existing plugin JAR on server
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: 2222
+        script: |
+          set -e
+          PLUGINS=/home/useradmin/mcserver/plugins
+          BACKUPS=/home/useradmin/mcserver/plugins/_backups
+          mkdir -p "$BACKUPS"
+          TS=$(date -u +%Y%m%dT%H%M%SZ)
+          for f in "$PLUGINS"/ServerUtils-*.jar; do
+            [ -e "$f" ] || continue
+            cp -v "$f" "$BACKUPS/$(basename "$f").$TS.bak"
+          done
+          ls -t "$BACKUPS" | tail -n +11 | xargs -I {} rm -f -- "$BACKUPS/{}" || true
+
+    - name: Copy JAR to remote server
       uses: appleboy/scp-action@master
       with:
         host: ${{ secrets.SSH_HOST }}
         username: ${{ secrets.SSH_USERNAME }}
         key: ${{ secrets.SSH_KEY }}
         port: 2222
-        source: "target/ServerUtils-11.1.jar"
-        target: "/home/useradmin/mcserver/plugins/"
+        source: ${{ steps.jar.outputs.path }}
+        target: /home/useradmin/mcserver/plugins/
         strip_components: 1
 
-    - name: Restart Minecraft Container
+    - name: Restart Minecraft container
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.SSH_HOST }}
@@ -52,3 +92,8 @@ jobs:
         script: |
           cd /home/useradmin/docker
           docker compose restart minecraft
+
+    - name: Summary
+      run: |
+        echo "Deployed ${{ steps.jar.outputs.name }} from ref '${{ inputs.branch }}'." >> "$GITHUB_STEP_SUMMARY"
+        echo "Previous JAR backed up under /home/useradmin/mcserver/plugins/_backups/ on the server." >> "$GITHUB_STEP_SUMMARY"
