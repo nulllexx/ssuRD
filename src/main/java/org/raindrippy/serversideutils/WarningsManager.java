@@ -26,7 +26,12 @@ public class WarningsManager {
         warningsFile = new File(plugin.getDataFolder(), "warnings.yml");
         if (!warningsFile.exists()) {
             warningsFile.getParentFile().mkdirs();
-            plugin.saveResource("warnings.yml", false);
+            try {
+                warningsFile.createNewFile();
+            } catch (IOException e) {
+                plugin.getLogger().severe("Could not create warnings.yml!");
+                e.printStackTrace();
+            }
         }
         warningsConfig = YamlConfiguration.loadConfiguration(warningsFile);
     }
