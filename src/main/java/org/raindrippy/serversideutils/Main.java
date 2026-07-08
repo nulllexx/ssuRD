@@ -23,7 +23,7 @@ public class Main extends JavaPlugin {
     private static final String AES_KEY = dotenv.get("AES_KEY");
 
     private static final int SEASON = 8;
-    private static final String THEME = "Renaissance";
+    private static final String THEME = "Random";
     private static final boolean DIGITAL_ECONOMY_ENABLED = true;
     private static final Set<String> HIDDEN_COMMANDS = new HashSet<>(Arrays.asList("sync"));
 
