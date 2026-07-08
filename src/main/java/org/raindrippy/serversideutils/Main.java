@@ -17,7 +17,9 @@ import java.util.Set;
 import java.util.UUID;
 
 public class Main extends JavaPlugin {
-    private static final Dotenv dotenv = Dotenv.load();
+    private static final Dotenv dotenv = Dotenv.configure()
+            .ignoreIfMissing()
+            .load();
     private static final String AES_KEY = dotenv.get("AES_KEY");
 
     private static final int SEASON = 7;
