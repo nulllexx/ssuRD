@@ -51,7 +51,8 @@ public class AuthService {
         UUID playerUUID = p.getUniqueId();
         frozenPlayers.remove(playerUUID);
         GameMode defMode = gameModeMap.get(playerUUID);
-        if (defMode.equals(GameMode.SPECTATOR)) defMode = GameMode.SURVIVAL;
+        // No recorded gamemode (e.g. authenticated without a prior join) -> default to survival.
+        if (defMode == null || defMode.equals(GameMode.SPECTATOR)) defMode = GameMode.SURVIVAL;
         p.removePotionEffect(PotionEffectType.BLINDNESS);
         p.setWalkSpeed(0.2f);
         p.sendMessage(ChatColor.GREEN + "Welcome! You're able to access the server.");
@@ -72,9 +73,17 @@ public class AuthService {
         String username = args[0];
         String password = args[1];
         if (apiClient.queryLogin(username, password)) {
+            String encryptedPassword;
+            try {
+                encryptedPassword = cryptoService.encrypt(password);
+            } catch (RuntimeException e) {
+                // Encryption misconfigured: refuse to store credentials rather than risk plaintext.
+                player.sendMessage(ChatColor.RED + "A server error prevented saving your login. Please contact staff.");
+                return;
+            }
             JSONObject playerCreds = new JSONObject();
             playerCreds.put("username", username);
-            playerCreds.put("password", cryptoService.encrypt(password));
+            playerCreds.put("password", encryptedPassword);
             credentialsManager.getCredentials().put(player.getUniqueId(), playerCreds);
             credentialsManager.save();
 

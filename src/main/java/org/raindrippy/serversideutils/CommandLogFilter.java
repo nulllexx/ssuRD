@@ -3,6 +3,7 @@ package org.raindrippy.serversideutils;
 import java.util.Set;
 import java.util.logging.Filter;
 import java.util.logging.LogRecord;
+import java.util.regex.Pattern;
 
 public class CommandLogFilter implements Filter {
     private final Set<String> hiddenCommands;
@@ -18,7 +19,10 @@ public class CommandLogFilter implements Filter {
             if (message.contains("issued server command:") ||
                     message.contains("executed command:")) {
                 for (String hiddenCmd : hiddenCommands) {
-                    if (message.toLowerCase().contains("/" + hiddenCmd)) {
+                    // Whole-command match: "/sync" as its own token, not a prefix of "/syncfoo".
+                    Pattern p = Pattern.compile("/" + Pattern.quote(hiddenCmd) + "($|\\s)",
+                            Pattern.CASE_INSENSITIVE);
+                    if (p.matcher(message).find()) {
                         return false;
                     }
                 }

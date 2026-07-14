@@ -9,9 +9,29 @@ import org.json.simple.JSONObject;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
 
 public class ApiClient {
+
+    // Shared login endpoint for users and admins; returns a "userToken" Set-Cookie
+    // used to authenticate the ban request. (Not /api/v-creds, which is MC-auth only.)
+    private static final String ADMIN_LOGIN_URL = "https://bakosmp.go.ro/api/login";
+    private static final String BAN_URL = "https://bakosmp.go.ro/api/admin/moderate";
+    // 3-day ban type (matches the "3d" type used in queryStatus).
+    private static final String BAN_TYPE = "3d";
+
+    private final String adminUser;
+    private final String adminPwd;
+
+    public ApiClient() {
+        this(null, null);
+    }
+
+    public ApiClient(String adminUser, String adminPwd) {
+        this.adminUser = adminUser;
+        this.adminPwd = adminPwd;
+    }
 
     private static class LoginRequest {
         @SuppressWarnings("unused")
@@ -122,6 +142,96 @@ public class ApiClient {
         } catch (Exception e) {
             e.printStackTrace();
             return false;
+        }
+    }
+
+    /** Cached admin session cookie (userToken); refreshed on demand or when it goes stale. */
+    private volatile String cachedCookie;
+
+    /**
+     * Bans the RainDrippy account for {@link #BAN_TYPE} using the admin session cookie.
+     * Reuses a cached cookie when available; if the ban is rejected as unauthenticated
+     * (expired/invalid token), it forces a fresh admin login and retries once so a
+     * borked token is never kept around.
+     *
+     * @param username the account username to ban (pulled from the player's saved credentials)
+     * @return true if the ban endpoint responded 2xx
+     */
+    public boolean banAccount(String username) {
+        try {
+            String banBody = new Gson().toJson(buildBanBody(username));
+
+            String cookie = getAdminCookie(false);
+            if (cookie == null) {
+                System.out.println("No admin cookie available; cannot ban " + username);
+                return false;
+            }
+
+            HttpUtil.HttpResponse banRes = HttpUtil.postJson(BAN_URL, banBody, cookie);
+
+            // Token likely expired/invalid -> drop it, log in fresh, and retry once.
+            if (isAuthFailure(banRes.statusCode)) {
+                System.out.println("Ban request rejected for " + username + " (status "
+                        + banRes.statusCode + "); refreshing admin token and retrying.");
+                cookie = getAdminCookie(true);
+                if (cookie == null) {
+                    System.out.println("Re-login failed; cannot ban " + username);
+                    return false;
+                }
+                banRes = HttpUtil.postJson(BAN_URL, banBody, cookie);
+            }
+
+            return banRes.statusCode >= 200 && banRes.statusCode < 300;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // Package-private for unit testing (pure logic, no behavior change).
+    Map<String, Object> buildBanBody(String username) {
+        Map<String, Object> banBody = new HashMap<>();
+        banBody.put("username", username);
+        banBody.put("type", BAN_TYPE);
+        banBody.put("modNote", "Automatic ban due to breaking of in-game rules. For more information, please contact the server staff.");
+        banBody.put("incriminatory", null);
+        banBody.put("poisonHWID", null);
+        banBody.put("makeAdmin", false);
+        return banBody;
+    }
+
+    /** 401/403 => credentials/token no longer accepted, so the cookie should be discarded. */
+    // Package-private for unit testing.
+    static boolean isAuthFailure(int statusCode) {
+        return statusCode == 401 || statusCode == 403;
+    }
+
+    /**
+     * Returns the admin session cookie, logging in as admin when there is no cached cookie
+     * or when {@code forceRefresh} is set. Clears the cache before re-logging in so a stale
+     * cookie is never retained. Returns null if login fails to yield a cookie.
+     */
+    private synchronized String getAdminCookie(boolean forceRefresh) {
+        if (!forceRefresh && cachedCookie != null) {
+            return cachedCookie;
+        }
+        cachedCookie = null;
+        try {
+            // Log in as admin to obtain the session cookie (userToken).
+            Map<String, Object> loginBody = new HashMap<>();
+            loginBody.put("username", adminUser);
+            loginBody.put("password", adminPwd);
+            HttpUtil.HttpResponse loginRes = HttpUtil.postJson(ADMIN_LOGIN_URL, new Gson().toJson(loginBody), null);
+            String cookie = HttpUtil.cookiesToHeader(loginRes.setCookies);
+            if (cookie == null) {
+                System.out.println("Admin login returned no cookie (status " + loginRes.statusCode + ").");
+                return null;
+            }
+            cachedCookie = cookie;
+            return cachedCookie;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
     }
 }

@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -45,6 +46,10 @@ public class WarningsManager {
     }
 
     public void save() {
+        // Drop entries removed from the map so cleared warnings don't resurrect on reload.
+        for (String key : new HashSet<>(warningsConfig.getKeys(false))) {
+            warningsConfig.set(key, null);
+        }
         for (UUID uuid : playerWarnings.keySet()) {
             warningsConfig.set(uuid.toString(), playerWarnings.get(uuid));
         }

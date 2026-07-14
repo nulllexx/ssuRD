@@ -9,6 +9,10 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Bug-pinning tests are tagged "knownbug" and excluded by default. Run them with:
+             mvn test -Dsurefire.groups=knownbug -Dsurefire.excludedGroups= -->
+        <surefire.groups></surefire.groups>
+        <surefire.excludedGroups>knownbug</surefire.excludedGroups>
   </properties>
   <repositories>
   	<repository>
@@ -19,8 +23,24 @@
         <id>jitpack.io</id>
         <url>https://jitpack.io</url>
     </repository>
+	<!-- PaperMC repo: MockBukkit (test) pulls paper-api 1.21.4-R0.1-SNAPSHOT from here. -->
+	<repository>
+        <id>papermc</id>
+        <url>https://repo.papermc.io/repository/maven-public/</url>
+    </repository>
   </repositories>
   <dependencies>
+  	<!-- Declared FIRST so paper-api's org.bukkit.* classes win on the test classpath.
+  	     MockBukkit is built against paper-api and needs Paper-only members (e.g.
+  	     SimpleCommandMap(Server, Map)) that spigot-api lacks. paper-api is a binary-compatible
+  	     superset of the Bukkit API our code compiles against, and test scope keeps it out of
+  	     the main compile + the shaded jar. -->
+  	<dependency>
+  		<groupId>io.papermc.paper</groupId>
+  		<artifactId>paper-api</artifactId>
+  		<version>1.21.4-R0.1-SNAPSHOT</version>
+  		<scope>test</scope>
+  	</dependency>
   	<dependency>
   		<groupId>org.spigotmc</groupId>
   		<artifactId>spigot-api</artifactId>
@@ -53,9 +73,52 @@
 	    <artifactId>json-simple</artifactId>
 	    <version>1.1.1</version>
 	</dependency>
+
+	<!-- ===== Test dependencies ===== -->
+	<!-- MockBukkit 4.45.1 is the last release built against paper-api 1.21.4,
+	     matching our spigot-api 1.21.4; 4.48.1+ jump to 1.21.5. It also pulls
+	     JUnit Jupiter 5.12.x transitively. -->
+	<dependency>
+	    <groupId>org.mockbukkit.mockbukkit</groupId>
+	    <artifactId>mockbukkit-v1.21</artifactId>
+	    <version>4.45.1</version>
+	    <scope>test</scope>
+	</dependency>
+	<dependency>
+	    <groupId>org.junit.jupiter</groupId>
+	    <artifactId>junit-jupiter</artifactId>
+	    <version>5.12.1</version>
+	    <scope>test</scope>
+	</dependency>
+	<dependency>
+	    <groupId>org.mockito</groupId>
+	    <artifactId>mockito-core</artifactId>
+	    <version>5.14.2</version>
+	    <scope>test</scope>
+	</dependency>
+	<dependency>
+	    <groupId>org.mockito</groupId>
+	    <artifactId>mockito-junit-jupiter</artifactId>
+	    <version>5.14.2</version>
+	    <scope>test</scope>
+	</dependency>
   </dependencies>
   <build>
     <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <version>3.5.2</version>
+            <configuration>
+                <!-- "knownbug" tests fail on purpose to flag real defects; excluded by default.
+                     Run them with: mvn test -Dsurefire.groups=knownbug -Dsurefire.excludedGroups= -->
+                <groups>${surefire.groups}</groups>
+                <excludedGroups>${surefire.excludedGroups}</excludedGroups>
+                <!-- Mockito loads its inline mock-maker via a dynamic agent; opt in explicitly
+                     to silence the JDK 21 dynamic-agent-loading warning. -->
+                <argLine>-XX:+EnableDynamicAgentLoading</argLine>
+            </configuration>
+        </plugin>
         <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-shade-plugin</artifactId>

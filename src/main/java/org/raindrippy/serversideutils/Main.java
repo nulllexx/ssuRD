@@ -21,6 +21,8 @@ public class Main extends JavaPlugin {
             .ignoreIfMissing()
             .load();
     private static final String AES_KEY = dotenv.get("AES_KEY");
+    private static final String ADMIN_USER = dotenv.get("ADMIN_USER");
+    private static final String ADMIN_PWD = dotenv.get("ADMIN_PWD");
 
     private static final int SEASON = 8;
     private static final String THEME = "???";
@@ -36,11 +38,13 @@ public class Main extends JavaPlugin {
     private CredentialsManager credentialsManager;
     private AuthService authService;
     private ScoreboardService scoreboardService;
+    private CombatManager combatManager;
+    private CombatLogManager combatLogManager;
 
     @Override
     public void onEnable() {
         cryptoService = new CryptoService(AES_KEY);
-        apiClient = new ApiClient();
+        apiClient = new ApiClient(ADMIN_USER, ADMIN_PWD);
 
         warningsManager = new WarningsManager(this);
         warningsManager.setup();
@@ -49,6 +53,12 @@ public class Main extends JavaPlugin {
         credentialsManager = new CredentialsManager(this);
         credentialsManager.setup();
         credentialsManager.load();
+
+        combatManager = new CombatManager();
+
+        combatLogManager = new CombatLogManager(this);
+        combatLogManager.setup();
+        combatLogManager.load();
 
         configManager = new ConfigManager(this);
 
@@ -87,7 +97,8 @@ public class Main extends JavaPlugin {
 
         PluginEventListener listener = new PluginEventListener(
                 this, authService, credentialsManager, cryptoService,
-                apiClient, scoreboardService, configManager, HIDDEN_COMMANDS);
+                apiClient, scoreboardService, configManager,
+                combatManager, combatLogManager, warningsManager, HIDDEN_COMMANDS);
         Bukkit.getPluginManager().registerEvents(listener, this);
 
         if (configManager.isTrackingEnabled()) configManager.savePlayerCount();
@@ -153,6 +164,7 @@ public class Main extends JavaPlugin {
     public void onDisable() {
         if (configManager != null) configManager.savePlayerCount();
         if (credentialsManager != null) credentialsManager.save();
+        if (combatLogManager != null) combatLogManager.save();
     }
 
     private boolean setupEconomy() {

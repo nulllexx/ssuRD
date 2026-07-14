@@ -176,52 +176,46 @@ public class ConfigManager {
         return true;
     }
 
-    @SuppressWarnings("unchecked")
     public void saveTracking(boolean value) {
         this.trackingEnabled = value;
-        confFile = new File(plugin.getDataFolder(), "conf.json");
-        if (!confFile.exists()) {
-            confFile.getParentFile().mkdirs();
-            plugin.saveResource("conf.json", false);
-        }
-        JSONObject trackState = new JSONObject();
-        trackState.put("tracking", value);
-        try {
-            FileWriter dataWriter = new FileWriter(confFile);
-            dataWriter.write(trackState.toJSONString());
-            dataWriter.close();
-        } catch (IOException e) {
-            plugin.getLogger().severe("Failed to save configuration: " + e.getMessage());
-        }
+        writeConfigKey("tracking", value);
     }
 
     public void saveLsRev(boolean value) {
         this.lifestealReviveEnabled = value;
         lifesteal.put("lsrev", value);
-        saveLifestealDict();
+        writeConfigKey("lsrev", value);
     }
 
     public void saveSeed(long seed) {
         lifesteal.put("seed", seed);
-        saveLifestealDict();
+        writeConfigKey("seed", seed);
     }
 
+    /** Reads conf.json (empty object if missing/unreadable) so single-key saves preserve siblings. */
+    private JSONObject readConfig() {
+        confFile = new File(plugin.getDataFolder(), "conf.json");
+        if (confFile.exists()) {
+            try (FileReader reader = new FileReader(confFile)) {
+                Object parsed = new JSONParser().parse(reader);
+                if (parsed instanceof JSONObject) {
+                    return (JSONObject) parsed;
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("Could not read conf.json; rewriting from scratch: " + e.getMessage());
+            }
+        }
+        return new JSONObject();
+    }
+
+    /** Updates a single key in conf.json without discarding the other settings. */
     @SuppressWarnings("unchecked")
-    private void saveLifestealDict() {
-        if (confFile == null) {
-            confFile = new File(plugin.getDataFolder(), "conf.json");
-        }
-
-        if (!confFile.exists()) {
-            confFile.getParentFile().mkdirs();
-            plugin.saveResource("conf.json", false);
-        }
-
-        JSONObject trackState = new JSONObject();
-        trackState.putAll(lifesteal);
-
+    private void writeConfigKey(String key, Object value) {
+        JSONObject config = readConfig();
+        config.put(key, value);
+        confFile.getParentFile().mkdirs();
         try (FileWriter dataWriter = new FileWriter(confFile)) {
-            dataWriter.write(trackState.toJSONString());
+            dataWriter.write(config.toJSONString());
         } catch (IOException e) {
             plugin.getLogger().severe("Failed to save configuration: " + e.getMessage());
         }
