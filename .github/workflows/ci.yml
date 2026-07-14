@@ -2,9 +2,13 @@ name: CI Build
 
 on:
   push:
-    branches-ignore: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
+
+# Avoid a redundant second run when a pushed branch also has an open PR.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
