@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Level;
 
 public class PluginEventListener implements Listener {
     private final Main plugin;
@@ -107,7 +108,9 @@ public class PluginEventListener implements Listener {
                         });
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    // Never log the password; freeze on any failure verifying saved credentials.
+                    plugin.getLogger().log(Level.WARNING,
+                            "Failed to verify saved credentials for " + player.getName() + "; freezing", e);
                     Bukkit.getScheduler().runTask(plugin, () -> authService.freezePlayer(player));
                 }
             });

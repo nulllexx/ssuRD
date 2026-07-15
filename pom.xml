@@ -47,6 +47,17 @@
   		<version>1.21.4-R0.1-SNAPSHOT</version>
   		<scope>provided</scope>
   	</dependency>
+  	<!-- Paper/Spigot route console logging through Log4j2 and ship log4j-core at runtime.
+  	     Command-echo lines ("issued server command:") are emitted on a Log4j2 logger, so
+  	     suppression must hook the Log4j2 layer (see CommandLogFilter). provided scope: compile
+  	     against it, but let the server's own jar satisfy it at runtime (not shaded). Version
+  	     tracks what Paper 1.21.4 bundles. -->
+  	<dependency>
+  		<groupId>org.apache.logging.log4j</groupId>
+  		<artifactId>log4j-core</artifactId>
+  		<version>2.22.1</version>
+  		<scope>provided</scope>
+  	</dependency>
   	    <dependency>
         <groupId>com.github.MilkBowl</groupId>
         <artifactId>VaultAPI</artifactId>

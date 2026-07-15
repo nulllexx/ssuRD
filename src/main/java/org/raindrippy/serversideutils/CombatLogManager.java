@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Level;
 
 public class CombatLogManager {
     private final JavaPlugin plugin;
@@ -30,8 +31,7 @@ public class CombatLogManager {
             try {
                 strikesFile.createNewFile();
             } catch (IOException e) {
-                plugin.getLogger().severe("Could not create cl_strikes.yml!");
-                e.printStackTrace();
+                plugin.getLogger().log(Level.SEVERE, "Could not create cl_strikes.yml!", e);
             }
         }
         strikesConfig = YamlConfiguration.loadConfiguration(strikesFile);
@@ -60,8 +60,7 @@ public class CombatLogManager {
         try {
             strikesConfig.save(strikesFile);
         } catch (IOException e) {
-            plugin.getLogger().severe("Could not save cl_strikes.yml!");
-            e.printStackTrace();
+            plugin.getLogger().log(Level.SEVERE, "Could not save cl_strikes.yml!", e);
         }
     }
 

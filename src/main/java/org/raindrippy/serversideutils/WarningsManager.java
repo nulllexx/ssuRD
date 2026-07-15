@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.logging.Level;
 
 public class WarningsManager {
     private final JavaPlugin plugin;
@@ -30,8 +31,7 @@ public class WarningsManager {
             try {
                 warningsFile.createNewFile();
             } catch (IOException e) {
-                plugin.getLogger().severe("Could not create warnings.yml!");
-                e.printStackTrace();
+                plugin.getLogger().log(Level.SEVERE, "Could not create warnings.yml!", e);
             }
         }
         warningsConfig = YamlConfiguration.loadConfiguration(warningsFile);
@@ -56,8 +56,7 @@ public class WarningsManager {
         try {
             warningsConfig.save(warningsFile);
         } catch (IOException e) {
-            plugin.getLogger().severe("Could not save warnings.yml!");
-            e.printStackTrace();
+            plugin.getLogger().log(Level.SEVERE, "Could not save warnings.yml!", e);
         }
     }
 

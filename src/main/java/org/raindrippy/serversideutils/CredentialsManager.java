@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.logging.Level;
 
 public class CredentialsManager {
     private final JavaPlugin plugin;
@@ -31,7 +32,7 @@ public class CredentialsManager {
                     writer.write("{}");
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                plugin.getLogger().log(Level.SEVERE, "Failed to create credentials file", e);
             }
         }
     }

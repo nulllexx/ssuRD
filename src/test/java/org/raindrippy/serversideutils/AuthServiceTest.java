@@ -70,7 +70,7 @@ class AuthServiceTest {
     void syncWrongArgCount() {
         authService.freezePlayer(player);
         authService.handleSync(player, new String[]{"onlyone"});
-        verify(apiClient, never()).queryLogin(Mockito.anyString(), Mockito.anyString());
+        verify(apiClient, never()).queryCredentials(Mockito.anyString(), Mockito.anyString());
         assertTrue(authService.isFrozen(player.getUniqueId()));
     }
 
@@ -79,7 +79,7 @@ class AuthServiceTest {
     void syncAlreadyAuthenticated() {
         // Player was never frozen -> treated as already authenticated.
         authService.handleSync(player, new String[]{"user", "pass"});
-        verify(apiClient, never()).queryLogin(Mockito.anyString(), Mockito.anyString());
+        verify(apiClient, never()).queryCredentials(Mockito.anyString(), Mockito.anyString());
     }
 
     @Test
@@ -89,7 +89,7 @@ class AuthServiceTest {
         // Simulate the join flow having recorded the player's gamemode before freezing.
         authService.getGameModeMap().put(uuid, GameMode.SURVIVAL);
         authService.freezePlayer(player);
-        when(apiClient.queryLogin("user", "pass")).thenReturn(true);
+        when(apiClient.queryCredentials("user", "pass")).thenReturn(ApiClient.LoginResult.SUCCESS);
 
         authService.handleSync(player, new String[]{"user", "pass"});
 
@@ -107,7 +107,7 @@ class AuthServiceTest {
     void syncFailure() {
         UUID uuid = player.getUniqueId();
         authService.freezePlayer(player);
-        when(apiClient.queryLogin("user", "wrong")).thenReturn(false);
+        when(apiClient.queryCredentials("user", "wrong")).thenReturn(ApiClient.LoginResult.INVALID_CREDENTIALS);
 
         authService.handleSync(player, new String[]{"user", "wrong"});
 

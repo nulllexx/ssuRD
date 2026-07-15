@@ -121,7 +121,7 @@ public class Main extends JavaPlugin {
             this.getCommand(cmd).setTabCompleter(tabCompleter);
         }
 
-        getLogger().getParent().setFilter(new CommandLogFilter(HIDDEN_COMMANDS));
+        installCommandLogFilter();
 
         new BukkitRunnable() {
             @Override
@@ -165,6 +165,24 @@ public class Main extends JavaPlugin {
         if (configManager != null) configManager.savePlayerCount();
         if (credentialsManager != null) credentialsManager.save();
         if (combatLogManager != null) combatLogManager.save();
+    }
+
+    /**
+     * Installs {@link CommandLogFilter} on the Log4j2 root logger so lines echoing sensitive
+     * commands (e.g. {@code /sync <user> <pass>}) never reach the console or log files. This is
+     * the layer Paper/Spigot actually log command echoes on; a java.util.logging filter does not
+     * see them. Fails loud rather than silently leaking if the backend is not Log4j2.
+     */
+    private void installCommandLogFilter() {
+        try {
+            org.apache.logging.log4j.core.Logger rootLogger =
+                    (org.apache.logging.log4j.core.Logger) org.apache.logging.log4j.LogManager
+                            .getRootLogger();
+            rootLogger.addFilter(new CommandLogFilter(HIDDEN_COMMANDS));
+        } catch (Throwable t) {
+            getLogger().severe("Failed to install command log filter; sensitive commands (e.g. "
+                    + "/sync credentials) may leak into server logs: " + t);
+        }
     }
 
     private boolean setupEconomy() {

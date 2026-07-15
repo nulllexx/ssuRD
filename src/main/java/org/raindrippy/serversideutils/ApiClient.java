@@ -11,8 +11,14 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ApiClient {
+
+    // Bukkit-free logger so ApiClient stays unit-testable offline; Paper bridges
+    // java.util.logging into Log4j2, so these land in the server console/log files.
+    private static final Logger LOGGER = Logger.getLogger(ApiClient.class.getName());
 
     // Shared login endpoint for users and admins; returns a "userToken" Set-Cookie
     // used to authenticate the ban request. (Not /api/v-creds, which is MC-auth only.)
@@ -63,19 +69,47 @@ public class ApiClient {
         return null;
     }
 
-    public boolean queryLogin(String username, String password) {
+    /** Outcome of a credential check against /api/v-creds. */
+    public enum LoginResult {
+        SUCCESS,
+        // password is bad
+        INVALID_CREDENTIALS,
+        // not whitelisted acc
+        NOT_MEMBER,
+        // mother of all uh-ohs
+        ERROR
+    }
+
+    /**
+     * Checks credentials against /api/v-creds, distinguishing a wrong password (401)
+     * from a valid-but-non-member account (200 with {@code isMember: false}).
+     */
+    public LoginResult queryCredentials(String username, String password) {
         try {
             Gson gson = new Gson();
             LoginRequest request = new LoginRequest(username, password);
             String json = gson.toJson(request);
-            String response = HttpUtil.postJson("https://bakosmp.go.ro/api/v-creds", json);
-            System.out.println("RAW RESPONSE: " + response);
-            LoginResponse loginResponse = gson.fromJson(response, LoginResponse.class);
-            return loginResponse.isIsMember();
+            HttpUtil.HttpResponse res = HttpUtil.postJson("https://bakosmp.go.ro/api/v-creds", json, null);
+            if (res.statusCode == 401) {
+                return LoginResult.INVALID_CREDENTIALS;
+            }
+            if (res.statusCode < 200 || res.statusCode >= 300) {
+                return LoginResult.ERROR;
+            }
+            LoginResponse loginResponse = gson.fromJson(res.body, LoginResponse.class);
+            if (loginResponse != null && loginResponse.isIsMember()) {
+                return LoginResult.SUCCESS;
+            }
+            return LoginResult.NOT_MEMBER;
         } catch (Exception e) {
-            e.printStackTrace();
-            return false;
+            // Never log username/password; the exception carries neither.
+            LOGGER.log(Level.WARNING, "Credential check against /api/v-creds failed", e);
+            return LoginResult.ERROR;
         }
+    }
+
+    public boolean queryLogin(String username, String password) {
+        return queryCredentials(username, password) == LoginResult.SUCCESS;
     }
 
     public boolean queryStatus(String username, Player p) {
@@ -140,7 +174,7 @@ public class ApiClient {
             p.kickPlayer(kickMsg);
             return false;
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Failed to query account status for " + username, e);
             return false;
         }
     }
@@ -163,7 +197,7 @@ public class ApiClient {
 
             String cookie = getAdminCookie(false);
             if (cookie == null) {
-                System.out.println("No admin cookie available; cannot ban " + username);
+                LOGGER.warning("No admin cookie available; cannot ban " + username);
                 return false;
             }
 
@@ -171,11 +205,11 @@ public class ApiClient {
 
             // Token likely expired/invalid -> drop it, log in fresh, and retry once.
             if (isAuthFailure(banRes.statusCode)) {
-                System.out.println("Ban request rejected for " + username + " (status "
+                LOGGER.warning("Ban request rejected for " + username + " (status "
                         + banRes.statusCode + "); refreshing admin token and retrying.");
                 cookie = getAdminCookie(true);
                 if (cookie == null) {
-                    System.out.println("Re-login failed; cannot ban " + username);
+                    LOGGER.warning("Re-login failed; cannot ban " + username);
                     return false;
                 }
                 banRes = HttpUtil.postJson(BAN_URL, banBody, cookie);
@@ -183,7 +217,7 @@ public class ApiClient {
 
             return banRes.statusCode >= 200 && banRes.statusCode < 300;
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Ban request failed for " + username, e);
             return false;
         }
     }
@@ -224,13 +258,14 @@ public class ApiClient {
             HttpUtil.HttpResponse loginRes = HttpUtil.postJson(ADMIN_LOGIN_URL, new Gson().toJson(loginBody), null);
             String cookie = HttpUtil.cookiesToHeader(loginRes.setCookies);
             if (cookie == null) {
-                System.out.println("Admin login returned no cookie (status " + loginRes.statusCode + ").");
+                LOGGER.warning("Admin login returned no cookie (status " + loginRes.statusCode + ").");
                 return null;
             }
             cachedCookie = cookie;
             return cachedCookie;
         } catch (Exception e) {
-            e.printStackTrace();
+            // Log the failure but not the login body (admin credentials).
+            LOGGER.log(Level.WARNING, "Admin login failed", e);
             return null;
         }
     }

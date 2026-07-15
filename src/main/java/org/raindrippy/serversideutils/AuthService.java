@@ -72,25 +72,35 @@ public class AuthService {
         }
         String username = args[0];
         String password = args[1];
-        if (apiClient.queryLogin(username, password)) {
-            String encryptedPassword;
-            try {
-                encryptedPassword = cryptoService.encrypt(password);
-            } catch (RuntimeException e) {
-                // Encryption misconfigured: refuse to store credentials rather than risk plaintext.
-                player.sendMessage(ChatColor.RED + "A server error prevented saving your login. Please contact staff.");
-                return;
-            }
-            JSONObject playerCreds = new JSONObject();
-            playerCreds.put("username", username);
-            playerCreds.put("password", encryptedPassword);
-            credentialsManager.getCredentials().put(player.getUniqueId(), playerCreds);
-            credentialsManager.save();
+        ApiClient.LoginResult result = apiClient.queryCredentials(username, password);
+        switch (result) {
+            case SUCCESS:
+                String encryptedPassword;
+                try {
+                    encryptedPassword = cryptoService.encrypt(password);
+                } catch (RuntimeException e) {
+                    // Encryption misconfigured: refuse to store credentials rather than risk plaintext.
+                    player.sendMessage(ChatColor.RED + "A server error prevented saving your login. Please contact staff.");
+                    return;
+                }
+                JSONObject playerCreds = new JSONObject();
+                playerCreds.put("username", username);
+                playerCreds.put("password", encryptedPassword);
+                credentialsManager.getCredentials().put(player.getUniqueId(), playerCreds);
+                credentialsManager.save();
 
-            unfreezePlayer(player);
-            player.sendMessage(ChatColor.GREEN + "Authentication successful! Your credentials have been saved.");
-        } else {
-            player.sendMessage(ChatColor.RED + "Authentication failed. Please check your credentials.");
+                unfreezePlayer(player);
+                player.sendMessage(ChatColor.GREEN + "Authentication successful! Your credentials have been saved.");
+                break;
+            case INVALID_CREDENTIALS:
+                player.sendMessage(ChatColor.RED + "Incorrect username or password. Please double-check your credentials and try again.");
+                break;
+            case NOT_MEMBER:
+                player.sendMessage(ChatColor.RED + "Those credentials are valid, but your account isn't a member of this server.");
+                break;
+            default:
+                player.sendMessage(ChatColor.RED + "A server error occurred while authenticating. Please try again later.");
+                break;
         }
     }
 }
