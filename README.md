@@ -1,5 +1,7 @@
 # ServerUtils
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 ServerUtils is our custom Spigot/Bukkit plugin (uses 1.21 API) created for the BakoSMP server. It provides a variety of useful commands, an authentication system / whitelist replacement, and economy features.
 
 ## Quick overview
