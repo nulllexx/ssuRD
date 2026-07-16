@@ -72,6 +72,42 @@ class CommandTabCompleterTest {
     }
 
     @Test
+    @DisplayName("warn second arg suggests a <reason> placeholder")
+    void warnReasonPlaceholder() {
+        assertEquals(List.of("<reason>"), complete("warn", "Bob", ""));
+        assertEquals(List.of("<reason>"), complete("owarn", "Bob", ""));
+    }
+
+    @Test
+    @DisplayName("sendmoney completes players then an <amount> placeholder with examples")
+    void sendMoneyCompletion() {
+        server.addPlayer("Alice");
+        assertTrue(complete("sendmoney", "al").contains("Alice"));
+        assertEquals(List.of("<amount>", "100", "1000"), complete("sendmoney", "Alice", ""));
+    }
+
+    @Test
+    @DisplayName("sync suggests <username> then <password> placeholders")
+    void syncPlaceholders() {
+        assertEquals(List.of("<username>"), complete("sync", ""));
+        assertEquals(List.of("<password>"), complete("sync", "user", ""));
+    }
+
+    @Test
+    @DisplayName("no-argument commands return no completions")
+    void noArgCommandsEmpty() {
+        assertTrue(complete("eventhub", "").isEmpty());
+        assertTrue(complete("return", "").isEmpty());
+        assertTrue(complete("togglescoreboard", "").isEmpty());
+    }
+
+    @Test
+    @DisplayName("oremovewarning second arg suggests the <number> placeholder")
+    void oremoveWarningNumberPlaceholder() {
+        assertEquals(List.of("<number>"), complete("oremovewarning", "Bob", ""));
+    }
+
+    @Test
     @DisplayName("an unrecognized command returns no completions")
     void unknownCommandEmpty() {
         assertTrue(complete("flyaway", "x").isEmpty());

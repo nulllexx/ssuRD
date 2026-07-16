@@ -106,18 +106,13 @@ public class Main extends JavaPlugin {
         PluginCommandHandler commandHandler = new PluginCommandHandler(
                 warningsManager, scoreboardService, configManager, econ, DIGITAL_ECONOMY_ENABLED);
 
+        CommandTabCompleter tabCompleter = new CommandTabCompleter();
         for (String cmd : new String[]{
                 "eventhub", "return", "togglescoreboard", "sendmoney",
                 "warn", "getwarnings", "removewarning", "clearwarnings",
                 "owarn", "oclearwarnings", "oremovewarning",
                 "setcounter", "lsrev", "sync"}) {
             this.getCommand(cmd).setExecutor(commandHandler);
-        }
-
-        CommandTabCompleter tabCompleter = new CommandTabCompleter();
-        for (String cmd : new String[]{
-                "warn", "owarn", "getwarnings", "clearwarnings",
-                "removewarning", "oremovewarning", "setcounter", "lsrev"}) {
             this.getCommand(cmd).setTabCompleter(tabCompleter);
         }
 

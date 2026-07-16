@@ -7,11 +7,12 @@ import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Criteria;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
-import org.bukkit.scoreboard.Score;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.ScoreboardManager;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -67,42 +68,53 @@ public class ScoreboardService {
     public Scoreboard build(Player player) {
         Scoreboard board = scoreboardManager.getNewScoreboard();
         Objective objective = board.registerNewObjective(OBJECTIVE_NAME, Criteria.DUMMY,
-                ChatColor.BOLD + "" + ChatColor.AQUA + "BakoSMP");
+                ChatColor.AQUA + "" + ChatColor.BOLD + "✦ BakoSMP ✦");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
 
-        String title = centerText(ChatColor.GREEN + "" + ChatColor.BOLD + "Your Status");
-        Score titleScore = objective.getScore(title);
-        titleScore.setScore(7);
-        Score emptyScore = objective.getScore("");
-        emptyScore.setScore(6);
+        List<String> lines = new ArrayList<>();
 
-        String nameLine = ChatColor.GOLD + "" + ChatColor.ITALIC + player.getName();
-        Score nameScore = objective.getScore(nameLine);
-        nameScore.setScore(5);
+        lines.add(separator(0));
 
-        double balance = econ.getBalance(player);
-        String formattedBalance = String.format("%.2f", balance);
-        String balanceLine = " ";
+        lines.add(ChatColor.GOLD + "" + ChatColor.BOLD + " ✦ "
+                + ChatColor.WHITE + ChatColor.ITALIC + player.getName());
+
         if (digitalEconomyEnabled) {
-            balanceLine = ChatColor.WHITE + "Balance: " + ChatColor.GREEN + "$" + formattedBalance;
+            String formattedBalance = String.format("%,.2f", econ.getBalance(player));
+            lines.add(ChatColor.GRAY + " Balance: " + ChatColor.GREEN + "$" + formattedBalance);
         }
-        Score balanceScore = objective.getScore(balanceLine);
-        balanceScore.setScore(4);
 
-        Score empty = objective.getScore(" ");
-        empty.setScore(3);
-        String seasonText = centerText(ChatColor.DARK_GREEN + "" + ChatColor.BOLD + "SEASON " + Integer.toString(season));
-        Score seasonScore = objective.getScore(seasonText);
-        Score themeScore = objective.getScore(ChatColor.DARK_RED + "" + ChatColor.ITALIC + "Theme: " + theme);
-        seasonScore.setScore(2);
-        themeScore.setScore(1);
+        lines.add(separator(1));
+
+        lines.add(centerText(ChatColor.DARK_GREEN + "" + ChatColor.BOLD + "SEASON " + season));
+        lines.add(ChatColor.DARK_RED + " Theme: " + ChatColor.RED + "" + ChatColor.ITALIC + theme);
+
+        lines.add(separator(2));
+
+        // Higher scores render nearer the top, so count down from the top line.
+        int score = lines.size();
+        for (String line : lines) {
+            objective.getScore(line).setScore(score--);
+        }
         return board;
+    }
+
+    // simple separator line for scoreboard
+    private String separator(int index) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(ChatColor.DARK_GRAY).append(ChatColor.STRIKETHROUGH);
+        for (int i = 0; i < 20; i++) {
+            sb.append(" ");
+        }
+        for (int i = 0; i < index; i++) {
+            sb.append(ChatColor.RESET);
+        }
+        return sb.toString();
     }
 
     private String centerText(String text) {
         String plain = ChatColor.stripColor(text);
-        int totalLength = 16;
-        int padSize = (totalLength - plain.length()) / 2;
+        int totalLength = 20;
+        int padSize = Math.max(0, (totalLength - plain.length()) / 2);
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < padSize; i++) {
             sb.append(" ");
