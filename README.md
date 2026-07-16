@@ -1,18 +1,15 @@
 # ServerUtils
 
-ServerUtils is a custom Spigot/Bukkit plugin (API version 1.21) designed for the BakoSMP server. It provides a variety of utility commands, an authentication system (Sync), and economy integration.
+ServerUtils is our custom Spigot/Bukkit plugin (uses 1.21 API) created for the BakoSMP server. It provides a variety of useful commands, an authentication system / whitelist replacement, and economy features.
 
-## Features
+## Quick overview
 
-- **Authentication System**: Mandatory account sync using `/sync <username> <password>`.
-- **Economy Integration**: Works with Vault to provide a balance scoreboard and money transfer capabilities.
-- **Warning System**: Comprehensive warning management (warn, get warnings, clear warnings) for both online and offline players.
-- **Scoreboard**: A custom side-bar scoreboard displaying player balance and server information.
-- **Teleportation**: Quick commands for teleporting to the event hub and the main world.
-- **Server Management**:
-  - LifeSteal auto-revive system toggle.
-  - Player count tracking and exporting to JSON.
-  - Command log filtering for sensitive information.
+- Authentication: Mandatory account sync using `/sync <username> <password>`. This replaces the vanilla whitelist system on the server, which is notoriously broken on our software.
+- Economy Integration: Works with (and depends on) Vault to provide a status scoreboard and custom cash transferring.
+- Warning System: Comprehensive warning management for both online and offline players to supplement existing moderation utilities.
+- Scoreboard: A custom side-bar scoreboard displaying player balance and season information, inspired by greater servers.
+- Teleportation: Quick commands for teleporting to the event hub and the main world.
+- LifeSteal system, player count tracking & filtering of sensitive commands from being logged.
 
 ## Commands
 
@@ -47,12 +44,12 @@ ServerUtils is a custom Spigot/Bukkit plugin (API version 1.21) designed for the
 - `plugins/ServerUtils/conf.json`: General configuration (tracking, lsrev, seed).
 - `authedPlayers.json`: (Root directory) Encrypted player credentials.
 - `plrCount.json`: (Root directory) Current online player count.
-- `.env`: Requires `AES_KEY` for password encryption.
+- `.env`: Requires `AES_KEY` for password encryption (we dont store in plaintext!).
 
 ## Dependencies
 
-- **Spigot API**: 1.21.4-R0.1-SNAPSHOT
-- **Vault API**: fdddf25e44
-- **Jackson Databind**: 2.20.0
-- **Gson**: 2.10.1
-- **Dotenv Java**: 3.0.0
+- Spigot API: 1.21.4-R0.1-SNAPSHOT
+- Vault API: fdddf25e44
+- Jackson Databind: 2.20.0
+- Gson: 2.10.1
+- Dotenv Java: 3.0.0
