@@ -30,6 +30,19 @@ jobs:
           exit 1
         fi
 
+    # Fail fast if AES_KEY isn't a usable AES length. Raw-bytes AES needs exactly 16/24/32 bytes;
+    # this is the exact footgun behind the "Invalid AES key length: 64 bytes" outage.
+    - name: Validate AES_KEY length
+      env:
+        AES_KEY: ${{ secrets.AES_KEY }}
+      run: |
+        len=$(printf '%s' "$AES_KEY" | wc -c)
+        if [ "$len" -ne 16 ] && [ "$len" -ne 24 ] && [ "$len" -ne 32 ]; then
+          echo "::error::AES_KEY secret must be 16, 24, or 32 bytes (AES-128/192/256); got $len. Fix the repo secret before deploying."
+          exit 1
+        fi
+        echo "AES_KEY length OK ($len bytes)."
+
     - uses: actions/checkout@v4
       with:
         # Manual: the chosen branch. Push: the pushed ref (inputs.branch is empty).
@@ -41,9 +54,6 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
         cache: maven
-
-    - name: Create .env file
-      run: echo "AES_KEY=${{ secrets.AES_KEY }}" > .env
 
     - name: Build with Maven
       run: mvn -B clean package --file pom.xml
@@ -89,6 +99,33 @@ jobs:
         target: /home/useradmin/mcserver/plugins/
         strip_components: 1
 
+    # Write the (validated) secret into the server's real .env so the plugin actually picks it up.
+    # Only the AES_KEY line is touched; ADMIN_USER/ADMIN_PWD and any other entries are preserved.
+    - name: Sync AES_KEY into the server .env
+      uses: appleboy/ssh-action@master
+      env:
+        AES_KEY: ${{ secrets.AES_KEY }}
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: 2222
+        envs: AES_KEY
+        script: |
+          set -e
+          ENV_FILE=/home/useradmin/mcserver/.env
+          if [ -z "$AES_KEY" ]; then
+            echo "::error::AES_KEY is empty; refusing to touch $ENV_FILE"
+            exit 1
+          fi
+          touch "$ENV_FILE"
+          tmp=$(mktemp)
+          grep -v '^AES_KEY=' "$ENV_FILE" > "$tmp" || true
+          printf 'AES_KEY=%s\n' "$AES_KEY" >> "$tmp"
+          cat "$tmp" > "$ENV_FILE"   # write in place: keeps the file's owner/permissions
+          rm -f "$tmp"
+          echo "AES_KEY synced into $ENV_FILE."
+
     - name: Restart Minecraft container
       uses: appleboy/ssh-action@master
       with:
@@ -103,4 +140,5 @@ jobs:
     - name: Summary
       run: |
         echo "Deployed ${{ steps.jar.outputs.name }} from ref '${{ inputs.branch || github.ref_name }}'." >> "$GITHUB_STEP_SUMMARY"
+        echo "AES_KEY (from the repo secret) synced into /home/useradmin/mcserver/.env and the container restarted." >> "$GITHUB_STEP_SUMMARY"
         echo "Previous JAR backed up under /home/useradmin/mcserver/plugins/_backups/ on the server." >> "$GITHUB_STEP_SUMMARY"
