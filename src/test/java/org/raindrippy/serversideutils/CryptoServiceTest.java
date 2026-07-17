@@ -38,11 +38,21 @@ class CryptoServiceTest {
     }
 
     @Test
-    @DisplayName("encrypt with an invalid-length key throws instead of leaking plaintext")
-    void invalidKeyThrows() {
-        // A 5-byte key is not a legal AES key length; encryption must fail loudly rather than
-        // silently returning the raw password (which would persist credentials in the clear).
-        CryptoService crypto = new CryptoService("short");
-        assertThrows(RuntimeException.class, () -> crypto.encrypt("topsecret"));
+    @DisplayName("a blank key is a misconfiguration and fails loudly at construction")
+    void blankKeyThrows() {
+        // An unset/blank AES_KEY must fail loudly rather than silently deriving a key from empty
+        // material and persisting credentials under a predictable key.
+        assertThrows(RuntimeException.class, () -> new CryptoService(""));
+        assertThrows(RuntimeException.class, () -> new CryptoService(null));
+    }
+
+    @Test
+    @DisplayName("keys of any non-blank length are accepted (regression for 64-byte key)")
+    void arbitraryLengthKeyRoundTrips() {
+        // Regression: a 64-character key previously threw "Invalid AES key length: 64 bytes".
+        // The key material is now hashed to a fixed-length AES-256 key, so any length works.
+        String longKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        CryptoService crypto = new CryptoService(longKey);
+        assertEquals("topsecret", crypto.decrypt(crypto.encrypt("topsecret")));
     }
 }
