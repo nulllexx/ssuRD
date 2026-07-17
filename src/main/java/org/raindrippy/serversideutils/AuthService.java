@@ -12,6 +12,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class AuthService {
     private final Set<UUID> frozenPlayers = new HashSet<>();
@@ -20,13 +22,23 @@ public class AuthService {
     private final ApiClient apiClient;
     private final CredentialsManager credentialsManager;
     private final CryptoService cryptoService;
+    private final Logger logger;
 
     public AuthService(ApiClient apiClient,
                        CredentialsManager credentialsManager,
                        CryptoService cryptoService) {
+        this(apiClient, credentialsManager, cryptoService, null);
+    }
+
+    public AuthService(ApiClient apiClient,
+                       CredentialsManager credentialsManager,
+                       CryptoService cryptoService,
+                       Logger logger) {
         this.apiClient = apiClient;
         this.credentialsManager = credentialsManager;
         this.cryptoService = cryptoService;
+        // In production Main injects the plugin logger; fall back to a class logger for tests.
+        this.logger = (logger != null) ? logger : Logger.getLogger(AuthService.class.getName());
     }
 
     public boolean isFrozen(UUID uuid) {
@@ -80,6 +92,10 @@ public class AuthService {
                     encryptedPassword = cryptoService.encrypt(password);
                 } catch (RuntimeException e) {
                     // Encryption misconfigured: refuse to store credentials rather than risk plaintext.
+                    // Log the failure (never the password) so this stops being an invisible "server error".
+                    logger.log(Level.SEVERE,
+                            "Encryption failed while saving login for " + player.getName()
+                                    + "; refusing to store credentials", e);
                     player.sendMessage(ChatColor.RED + "A server error prevented saving your login. Please contact staff.");
                     return;
                 }

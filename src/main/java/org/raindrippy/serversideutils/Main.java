@@ -44,7 +44,7 @@ public class Main extends JavaPlugin {
     @Override
     public void onEnable() {
         cryptoService = new CryptoService(AES_KEY);
-        apiClient = new ApiClient(ADMIN_USER, ADMIN_PWD);
+        apiClient = new ApiClient(ADMIN_USER, ADMIN_PWD, getLogger());
 
         warningsManager = new WarningsManager(this);
         warningsManager.setup();
@@ -75,7 +75,7 @@ public class Main extends JavaPlugin {
             return;
         }
 
-        authService = new AuthService(apiClient, credentialsManager, cryptoService);
+        authService = new AuthService(apiClient, credentialsManager, cryptoService, getLogger());
 
         configManager.loadAll();
 

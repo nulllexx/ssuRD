@@ -16,9 +16,15 @@ import java.util.logging.Logger;
 
 public class ApiClient {
 
-    // Bukkit-free logger so ApiClient stays unit-testable offline; Paper bridges
-    // java.util.logging into Log4j2, so these land in the server console/log files.
-    private static final Logger LOGGER = Logger.getLogger(ApiClient.class.getName());
+    // Fallback logger for offline/unit-test construction. In production Main injects the
+    // plugin logger (also a java.util.logging.Logger) so these lines reliably reach the Paper
+    // console/log files; a standalone JUL logger is not guaranteed to be bridged into Log4j2.
+    private static final Logger DEFAULT_LOGGER = Logger.getLogger(ApiClient.class.getName());
+
+    /** Max chars of a response body echoed into a log line (avoids dumping huge error pages). */
+    private static final int MAX_LOGGED_BODY = 500;
+
+    private final Logger logger;
 
     // Shared login endpoint for users and admins; returns a "userToken" Set-Cookie
     // used to authenticate the ban request. (Not /api/v-creds, which is MC-auth only.)
@@ -31,12 +37,17 @@ public class ApiClient {
     private final String adminPwd;
 
     public ApiClient() {
-        this(null, null);
+        this(null, null, null);
     }
 
     public ApiClient(String adminUser, String adminPwd) {
+        this(adminUser, adminPwd, null);
+    }
+
+    public ApiClient(String adminUser, String adminPwd, Logger logger) {
         this.adminUser = adminUser;
         this.adminPwd = adminPwd;
+        this.logger = (logger != null) ? logger : DEFAULT_LOGGER;
     }
 
     private static class LoginRequest {
@@ -94,6 +105,9 @@ public class ApiClient {
                 return LoginResult.INVALID_CREDENTIALS;
             }
             if (res.statusCode < 200 || res.statusCode >= 300) {
+                // Never log the request/credentials; only the response status + a trimmed body.
+                logger.warning("Credential check against /api/v-creds failed: HTTP "
+                        + res.statusCode + ", body=" + trimBody(res.body));
                 return LoginResult.ERROR;
             }
             LoginResponse loginResponse = gson.fromJson(res.body, LoginResponse.class);
@@ -103,13 +117,20 @@ public class ApiClient {
             return LoginResult.NOT_MEMBER;
         } catch (Exception e) {
             // Never log username/password; the exception carries neither.
-            LOGGER.log(Level.WARNING, "Credential check against /api/v-creds failed", e);
+            logger.log(Level.WARNING, "Credential check against /api/v-creds failed", e);
             return LoginResult.ERROR;
         }
     }
 
     public boolean queryLogin(String username, String password) {
         return queryCredentials(username, password) == LoginResult.SUCCESS;
+    }
+
+    /** Collapses a response body to a single, length-capped line safe to drop into a log. */
+    private static String trimBody(String body) {
+        if (body == null) return "<none>";
+        String oneLine = body.replaceAll("\\s+", " ").trim();
+        return oneLine.length() > MAX_LOGGED_BODY ? oneLine.substring(0, MAX_LOGGED_BODY) + "..." : oneLine;
     }
 
     public boolean queryStatus(String username, Player p) {
@@ -174,7 +195,7 @@ public class ApiClient {
             p.kickPlayer(kickMsg);
             return false;
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Failed to query account status for " + username, e);
+            logger.log(Level.WARNING, "Failed to query account status for " + username, e);
             return false;
         }
     }
@@ -197,7 +218,7 @@ public class ApiClient {
 
             String cookie = getAdminCookie(false);
             if (cookie == null) {
-                LOGGER.warning("No admin cookie available; cannot ban " + username);
+                logger.warning("No admin cookie available; cannot ban " + username);
                 return false;
             }
 
@@ -205,11 +226,11 @@ public class ApiClient {
 
             // Token likely expired/invalid -> drop it, log in fresh, and retry once.
             if (isAuthFailure(banRes.statusCode)) {
-                LOGGER.warning("Ban request rejected for " + username + " (status "
+                logger.warning("Ban request rejected for " + username + " (status "
                         + banRes.statusCode + "); refreshing admin token and retrying.");
                 cookie = getAdminCookie(true);
                 if (cookie == null) {
-                    LOGGER.warning("Re-login failed; cannot ban " + username);
+                    logger.warning("Re-login failed; cannot ban " + username);
                     return false;
                 }
                 banRes = HttpUtil.postJson(BAN_URL, banBody, cookie);
@@ -217,7 +238,7 @@ public class ApiClient {
 
             return banRes.statusCode >= 200 && banRes.statusCode < 300;
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Ban request failed for " + username, e);
+            logger.log(Level.WARNING, "Ban request failed for " + username, e);
             return false;
         }
     }
@@ -258,14 +279,14 @@ public class ApiClient {
             HttpUtil.HttpResponse loginRes = HttpUtil.postJson(ADMIN_LOGIN_URL, new Gson().toJson(loginBody), null);
             String cookie = HttpUtil.cookiesToHeader(loginRes.setCookies);
             if (cookie == null) {
-                LOGGER.warning("Admin login returned no cookie (status " + loginRes.statusCode + ").");
+                logger.warning("Admin login returned no cookie (status " + loginRes.statusCode + ").");
                 return null;
             }
             cachedCookie = cookie;
             return cachedCookie;
         } catch (Exception e) {
             // Log the failure but not the login body (admin credentials).
-            LOGGER.log(Level.WARNING, "Admin login failed", e);
+            logger.log(Level.WARNING, "Admin login failed", e);
             return null;
         }
     }

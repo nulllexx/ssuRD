@@ -4,13 +4,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mockStatic;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 
 /** Offline pure-logic tests for {@link ApiClient} (no network hit). */
 class ApiClientLogicTest {
@@ -73,6 +83,39 @@ class ApiClientLogicTest {
         assertTrue(body.containsKey("poisonHWID"));
         assertNull(body.get("poisonHWID"));
         assertEquals(Boolean.FALSE, body.get("makeAdmin"));
+    }
+
+    @Test
+    @DisplayName("queryCredentials logs the HTTP status on a non-2xx response (and never the password)")
+    void nonSuccessStatusIsLogged() {
+        // Capture what the injected logger emits.
+        Logger logger = Logger.getLogger("ApiClientLoggingTest");
+        logger.setUseParentHandlers(false);
+        logger.setLevel(Level.ALL);
+        List<LogRecord> records = new ArrayList<>();
+        Handler handler = new Handler() {
+            @Override public void publish(LogRecord r) { records.add(r); }
+            @Override public void flush() {}
+            @Override public void close() {}
+        };
+        logger.addHandler(handler);
+
+        ApiClient client = new ApiClient(null, null, logger);
+        try (MockedStatic<HttpUtil> http = mockStatic(HttpUtil.class)) {
+            http.when(() -> HttpUtil.postJson(anyString(), anyString(), any()))
+                    .thenReturn(new HttpUtil.HttpResponse(502, "<html>502 Bad Gateway</html>"));
+
+            ApiClient.LoginResult result = client.queryCredentials("bob", "secret-pw");
+            assertEquals(ApiClient.LoginResult.ERROR, result, "non-2xx must map to ERROR");
+        } finally {
+            logger.removeHandler(handler);
+        }
+
+        assertEquals(1, records.size(), "the silent non-2xx path must now emit exactly one log record");
+        LogRecord rec = records.get(0);
+        assertEquals(Level.WARNING, rec.getLevel());
+        assertTrue(rec.getMessage().contains("502"), "log should carry the HTTP status for diagnosis");
+        assertFalse(rec.getMessage().contains("secret-pw"), "log must never contain the password");
     }
 
     @Test
