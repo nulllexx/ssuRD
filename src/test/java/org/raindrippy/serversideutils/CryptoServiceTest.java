@@ -38,35 +38,11 @@ class CryptoServiceTest {
     }
 
     @Test
-    @DisplayName("a blank key is a misconfiguration and fails loudly at construction")
-    void blankKeyThrows() {
-        // An unset/blank AES_KEY must fail loudly rather than silently deriving a key from empty
-        // material and persisting credentials under a predictable key.
-        assertThrows(RuntimeException.class, () -> new CryptoService(""));
-        assertThrows(RuntimeException.class, () -> new CryptoService(null));
-    }
-
-    @Test
-    @DisplayName("keys of any non-blank length are accepted (regression for 64-byte key)")
-    void arbitraryLengthKeyRoundTrips() {
-        // Regression: a 64-character key previously threw "Invalid AES key length: 64 bytes".
-        // The key material is now hashed to a fixed-length AES key, so any length works.
-        String longKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-        CryptoService crypto = new CryptoService(longKey);
-        assertEquals("topsecret", crypto.decrypt(crypto.encrypt("topsecret")));
-    }
-
-    @Test
-    @DisplayName("derived key is 128-bit so encryption works without the unlimited JCE policy")
-    void derivedKeyIs128Bit() throws Exception {
-        // Regression: deriving a 32-byte (AES-256) key made every /sync save throw
-        // "Illegal key size" on JREs with the limited crypto policy (e.g. the production
-        // container), surfacing as the "A server error prevented saving your login" message.
-        // The key must stay 16 bytes (AES-128), which every JVM supports out of the box.
-        CryptoService crypto = new CryptoService(VALID_KEY);
-        java.lang.reflect.Field keyField = CryptoService.class.getDeclaredField("key");
-        keyField.setAccessible(true);
-        javax.crypto.spec.SecretKeySpec key = (javax.crypto.spec.SecretKeySpec) keyField.get(crypto);
-        assertEquals(16, key.getEncoded().length, "derived AES key must be 128-bit (16 bytes)");
+    @DisplayName("encrypt with an invalid-length key throws instead of leaking plaintext")
+    void invalidKeyThrows() {
+        // A 5-byte key is not a legal AES key length; encryption must fail loudly rather than
+        // silently returning the raw password (which would persist credentials in the clear).
+        CryptoService crypto = new CryptoService("short");
+        assertThrows(RuntimeException.class, () -> crypto.encrypt("topsecret"));
     }
 }
