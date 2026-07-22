@@ -4,11 +4,13 @@ import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.World;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,8 +48,9 @@ public class PluginCommandHandler implements CommandExecutor {
 
         switch (name) {
             case "eventhub":
-            case "return":
                 return handleTeleport(player, name);
+            case "return":
+                return handleReturn(player);
             case "togglescoreboard":
                 scoreboardService.toggle(player);
                 return true;
@@ -83,7 +86,24 @@ public class PluginCommandHandler implements CommandExecutor {
         String worldName = cmdName.equals("eventhub") ? "eventhub" : "world";
         String consoleCommand = "mvtp " + player.getName() + " " + worldName;
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), consoleCommand);
-        player.sendMessage("Teleporting you to " + worldName + "...");
+        player.sendMessage(ChatColor.GREEN + "Teleporting you to " + worldName + "...");
+        return true;
+    }
+
+    private boolean handleReturn(Player player) {
+        Location bedSpawn = player.getRespawnLocation();
+        if (bedSpawn != null) {
+            player.teleport(bedSpawn);
+            player.sendMessage(ChatColor.GREEN + "Teleporting you to your home.");
+        } else {
+            World mainWorld = Bukkit.getWorld("world");
+            if (mainWorld != null) {
+                player.teleport(mainWorld.getSpawnLocation());
+                player.sendMessage(ChatColor.GREEN + "You don't have a home set. Teleporting you to the world spawn.");
+            } else {
+                player.sendMessage(ChatColor.RED + "The main world could not be found. Please contact an administrator.");
+            }
+        }
         return true;
     }
 
