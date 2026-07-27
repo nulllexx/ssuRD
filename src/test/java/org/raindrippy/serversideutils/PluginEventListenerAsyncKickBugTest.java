@@ -76,7 +76,8 @@ class PluginEventListenerAsyncKickBugTest {
 
         PluginEventListener listener = new PluginEventListener(plugin, authService, credentialsManager,
                 cryptoService, apiClient, scoreboardService, configManager, combatManager,
-                combatLogManager, warningsManager, new HashSet<>(List.of("sync")));
+                combatLogManager, warningsManager, mock(PendingPaymentsManager.class),
+                new HashSet<>(List.of("sync")));
 
         // A REAL PlayerMock enforces Bukkit's main-thread-only kick rule.
         PlayerMock player = server.addPlayer("Repeat");

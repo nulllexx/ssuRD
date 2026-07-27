@@ -28,6 +28,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import org.mockbukkit.mockbukkit.MockBukkit;
@@ -45,6 +46,7 @@ class PluginCommandHandlerTest {
     private ScoreboardService scoreboardService;
     private ConfigManager configManager;
     private Economy econ;
+    private PendingPaymentsManager pendingPaymentsManager;
     private PluginCommandHandler handler;
 
     @BeforeEach
@@ -57,7 +59,9 @@ class PluginCommandHandlerTest {
         scoreboardService = mock(ScoreboardService.class);
         configManager = mock(ConfigManager.class);
         econ = mock(Economy.class);
-        handler = new PluginCommandHandler(warningsManager, scoreboardService, configManager, econ, true);
+        pendingPaymentsManager = mock(PendingPaymentsManager.class);
+        handler = new PluginCommandHandler(warningsManager, scoreboardService, configManager,
+                pendingPaymentsManager, econ, true);
     }
 
     @AfterEach
@@ -167,6 +171,88 @@ class PluginCommandHandlerTest {
         verify(econ, never()).depositPlayer(eq(alice), anyDouble()); // no rollback on success
         assertTrue(drainFor(alice, "successfully sent"));
         assertTrue(drainFor(bob, "received"));
+        // An online recipient is told immediately, so nothing is queued for their next login.
+        verify(pendingPaymentsManager, never())
+                .record(Mockito.any(UUID.class), Mockito.anyString(), anyDouble());
+    }
+
+    @Test
+    @DisplayName("/sendmoney to an offline player credits them now and queues a login notice")
+    void sendMoneyOfflineTargetQueuesNotice() {
+        PlayerMock alice = server.addPlayer("Alice");
+        PlayerMock bob = server.addPlayer("Bob");
+        UUID bobId = bob.getUniqueId();
+        bob.disconnect();
+
+        when(econ.getBalance(alice)).thenReturn(100.0);
+        when(econ.withdrawPlayer((OfflinePlayer) alice, 10.0)).thenReturn(ok(10.0));
+        when(econ.depositPlayer(Mockito.any(OfflinePlayer.class), eq(10.0))).thenReturn(ok(10.0));
+
+        handler.onCommand(alice, command("sendmoney"), "sendmoney", new String[]{"Bob", "10"});
+
+        // The balance moves immediately — the notice is the only thing that waits.
+        verify(econ).withdrawPlayer(alice, 10.0);
+        ArgumentCaptor<OfflinePlayer> target = ArgumentCaptor.forClass(OfflinePlayer.class);
+        verify(econ).depositPlayer(target.capture(), eq(10.0));
+        assertEquals(bobId, target.getValue().getUniqueId());
+        verify(pendingPaymentsManager).record(bobId, "Alice", 10.0);
+        assertTrue(drainFor(alice, "will be notified when they next log in"));
+    }
+
+    @Test
+    @DisplayName("/sendmoney refunds and queues nothing when the offline deposit fails")
+    void sendMoneyOfflineDepositFailureRollsBack() {
+        PlayerMock alice = server.addPlayer("Alice");
+        PlayerMock bob = server.addPlayer("Bob");
+        bob.disconnect();
+
+        when(econ.getBalance(alice)).thenReturn(100.0);
+        when(econ.withdrawPlayer((OfflinePlayer) alice, 10.0)).thenReturn(ok(10.0));
+        when(econ.depositPlayer(Mockito.any(OfflinePlayer.class), eq(10.0))).thenReturn(fail());
+
+        handler.onCommand(alice, command("sendmoney"), "sendmoney", new String[]{"Bob", "10"});
+
+        verify(econ).depositPlayer(alice, 10.0); // refund
+        verify(pendingPaymentsManager, never())
+                .record(Mockito.any(UUID.class), Mockito.anyString(), anyDouble());
+        assertTrue(drainFor(alice, "Transaction failed"));
+    }
+
+    @Test
+    @DisplayName("/sendmoney to a name that has never joined is still rejected")
+    void sendMoneyUnknownTarget() {
+        PlayerMock alice = server.addPlayer("Alice");
+
+        handler.onCommand(alice, command("sendmoney"), "sendmoney", new String[]{"Ghost", "10"});
+
+        assertTrue(drainFor(alice, "Player not found"));
+        verify(econ, never()).withdrawPlayer(Mockito.any(OfflinePlayer.class), anyDouble());
+        verify(pendingPaymentsManager, never())
+                .record(Mockito.any(UUID.class), Mockito.anyString(), anyDouble());
+    }
+
+    @Test
+    @DisplayName("/sendmoney to yourself is rejected")
+    void sendMoneyToSelf() {
+        PlayerMock alice = server.addPlayer("Alice");
+
+        handler.onCommand(alice, command("sendmoney"), "sendmoney", new String[]{"Alice", "10"});
+
+        assertTrue(drainFor(alice, "yourself"));
+        verify(econ, never()).withdrawPlayer(Mockito.any(OfflinePlayer.class), anyDouble());
+    }
+
+    @Test
+    @DisplayName("/sendmoney with NaN as the amount moves no money")
+    void sendMoneyNaNLiteral() {
+        PlayerMock alice = server.addPlayer("Alice");
+        server.addPlayer("Bob");
+        when(econ.getBalance(alice)).thenReturn(100.0);
+
+        handler.onCommand(alice, command("sendmoney"), "sendmoney", new String[]{"Bob", "NaN"});
+
+        assertTrue(drainFor(alice, "Invalid amount"));
+        verify(econ, never()).withdrawPlayer(Mockito.any(OfflinePlayer.class), anyDouble());
     }
 
     // ----- /warn -----

@@ -22,17 +22,20 @@ public class PluginCommandHandler implements CommandExecutor {
     private final WarningsManager warningsManager;
     private final ScoreboardService scoreboardService;
     private final ConfigManager configManager;
+    private final PendingPaymentsManager pendingPaymentsManager;
     private final Economy econ;
     private final boolean digitalEconomyEnabled;
 
     public PluginCommandHandler(WarningsManager warningsManager,
                                 ScoreboardService scoreboardService,
                                 ConfigManager configManager,
+                                PendingPaymentsManager pendingPaymentsManager,
                                 Economy econ,
                                 boolean digitalEconomyEnabled) {
         this.warningsManager = warningsManager;
         this.scoreboardService = scoreboardService;
         this.configManager = configManager;
+        this.pendingPaymentsManager = pendingPaymentsManager;
         this.econ = econ;
         this.digitalEconomyEnabled = digitalEconomyEnabled;
     }
@@ -116,17 +119,29 @@ public class PluginCommandHandler implements CommandExecutor {
             player.sendMessage(ChatColor.RED + message);
             return true;
         }
-        Player targetPlayer = Bukkit.getPlayer(args[0]);
-        if (targetPlayer == null) {
-            player.sendMessage(ChatColor.RED + "Player not found.");
-            return true;
-        }
         if (!digitalEconomyEnabled) {
             player.sendMessage(ChatColor.RED + "Digital economy is disabled.");
             return true;
         }
+        // Fall back to a player who has joined before, so senders don't have to care whether the
+        // target is currently online. Offline recipients are credited immediately and told on join.
+        Player onlineTarget = Bukkit.getPlayer(args[0]);
+        OfflinePlayer targetPlayer = onlineTarget != null ? onlineTarget : findOfflinePlayer(args[0]);
+        if (targetPlayer == null) {
+            player.sendMessage(ChatColor.RED + "Player not found.");
+            return true;
+        }
+        if (targetPlayer.getUniqueId().equals(player.getUniqueId())) {
+            player.sendMessage(ChatColor.RED + "You can't send money to yourself.");
+            return true;
+        }
         try {
             double amount = Double.parseDouble(args[1]);
+            // "NaN" and "Infinity" parse fine but slip past every comparison below.
+            if (!Double.isFinite(amount)) {
+                player.sendMessage(ChatColor.RED + "Invalid amount. Please enter a valid number.");
+                return true;
+            }
             if (amount <= 0) {
                 player.sendMessage(ChatColor.RED + "Amount must be greater than 0.");
                 return true;
@@ -146,8 +161,18 @@ public class PluginCommandHandler implements CommandExecutor {
                 player.sendMessage(ChatColor.RED + "Transaction failed: " + depositResponse.errorMessage);
                 return true;
             }
-            player.sendMessage(ChatColor.GREEN + "You have successfully sent $" + amount + " to " + targetPlayer.getName() + ".");
-            targetPlayer.sendMessage(ChatColor.GREEN + "You have received $" + amount + " from " + player.getName() + ".");
+            String targetName = targetPlayer.getName() != null ? targetPlayer.getName() : args[0];
+            if (onlineTarget != null) {
+                player.sendMessage(ChatColor.GREEN + "You have successfully sent $" + formatAmount(amount)
+                        + " to " + targetName + ".");
+                onlineTarget.sendMessage(ChatColor.GREEN + "You have received $" + formatAmount(amount)
+                        + " from " + player.getName() + ".");
+            } else {
+                // Balance already moved; only the chat notice waits for them to log back in.
+                pendingPaymentsManager.record(targetPlayer.getUniqueId(), player.getName(), amount);
+                player.sendMessage(ChatColor.GREEN + "You have successfully sent $" + formatAmount(amount)
+                        + " to " + targetName + ". They are offline and will be notified when they next log in.");
+            }
         } catch (NumberFormatException e) {
             player.sendMessage(ChatColor.RED + "Invalid amount. Please enter a valid number.");
         }
@@ -390,6 +415,11 @@ public class PluginCommandHandler implements CommandExecutor {
             sender.sendMessage(ChatColor.RED + "Invalid argument. Use true or false.");
         }
         return true;
+    }
+
+    /** Renders a currency amount the same way the scoreboard does, e.g. {@code 1,234.50}. */
+    static String formatAmount(double amount) {
+        return String.format("%,.2f", amount);
     }
 
     private OfflinePlayer findOfflinePlayer(String name) {

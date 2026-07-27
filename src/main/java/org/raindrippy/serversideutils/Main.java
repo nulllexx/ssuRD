@@ -40,6 +40,7 @@ public class Main extends JavaPlugin {
     private ScoreboardService scoreboardService;
     private CombatManager combatManager;
     private CombatLogManager combatLogManager;
+    private PendingPaymentsManager pendingPaymentsManager;
 
     @Override
     public void onEnable() {
@@ -59,6 +60,10 @@ public class Main extends JavaPlugin {
         combatLogManager = new CombatLogManager(this);
         combatLogManager.setup();
         combatLogManager.load();
+
+        pendingPaymentsManager = new PendingPaymentsManager(this);
+        pendingPaymentsManager.setup();
+        pendingPaymentsManager.load();
 
         configManager = new ConfigManager(this);
 
@@ -98,13 +103,15 @@ public class Main extends JavaPlugin {
         PluginEventListener listener = new PluginEventListener(
                 this, authService, credentialsManager, cryptoService,
                 apiClient, scoreboardService, configManager,
-                combatManager, combatLogManager, warningsManager, HIDDEN_COMMANDS);
+                combatManager, combatLogManager, warningsManager, pendingPaymentsManager,
+                HIDDEN_COMMANDS);
         Bukkit.getPluginManager().registerEvents(listener, this);
 
         if (configManager.isTrackingEnabled()) configManager.savePlayerCount();
 
         PluginCommandHandler commandHandler = new PluginCommandHandler(
-                warningsManager, scoreboardService, configManager, econ, DIGITAL_ECONOMY_ENABLED);
+                warningsManager, scoreboardService, configManager, pendingPaymentsManager,
+                econ, DIGITAL_ECONOMY_ENABLED);
 
         CommandTabCompleter tabCompleter = new CommandTabCompleter();
         for (String cmd : new String[]{
@@ -160,6 +167,7 @@ public class Main extends JavaPlugin {
         if (configManager != null) configManager.savePlayerCount();
         if (credentialsManager != null) credentialsManager.save();
         if (combatLogManager != null) combatLogManager.save();
+        if (pendingPaymentsManager != null) pendingPaymentsManager.save();
     }
 
     /**

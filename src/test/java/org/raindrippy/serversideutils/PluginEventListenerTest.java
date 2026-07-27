@@ -52,6 +52,7 @@ class PluginEventListenerTest {
     private CombatManager combatManager;
     private CombatLogManager combatLogManager;
     private WarningsManager warningsManager;
+    private PendingPaymentsManager pendingPaymentsManager;
 
     private Map<UUID, List<String>> warningsStore;
     private Map<UUID, JSONObject> credsStore;
@@ -76,6 +77,7 @@ class PluginEventListenerTest {
         combatManager = mock(CombatManager.class);
         combatLogManager = mock(CombatLogManager.class);
         warningsManager = mock(WarningsManager.class);
+        pendingPaymentsManager = mock(PendingPaymentsManager.class);
 
         warningsStore = new HashMap<>();
         credsStore = new HashMap<>();
@@ -87,7 +89,7 @@ class PluginEventListenerTest {
         Set<String> hiddenCommands = new HashSet<>(List.of("sync"));
         listener = new PluginEventListener(plugin, authService, credentialsManager, cryptoService,
                 apiClient, scoreboardService, configManager, combatManager, combatLogManager,
-                warningsManager, hiddenCommands);
+                warningsManager, pendingPaymentsManager, hiddenCommands);
     }
 
     @AfterEach
@@ -339,6 +341,45 @@ class PluginEventListenerTest {
 
         verify(scoreboardService).enable(player);
         verify(authService).freezePlayer(player);
+    }
+
+    // ---------- offline payment notices ----------
+
+    @Test
+    @DisplayName("money received while offline is reported on join and the notice is then cleared")
+    void joinDeliversPendingPaymentNotice() {
+        PlayerMock player = server.addPlayer("Bob");
+        UUID uuid = player.getUniqueId();
+        when(pendingPaymentsManager.hasPending(uuid)).thenReturn(true);
+        when(pendingPaymentsManager.getPending(uuid)).thenReturn(List.of(
+                new PendingPaymentsManager.PendingPayment("Alice", 50.0),
+                new PendingPaymentsManager.PendingPayment("Carol", 12.5)));
+
+        PlayerJoinEvent event = mock(PlayerJoinEvent.class);
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onPlayerJoin(event);
+        // The notice is delayed 40 ticks so it isn't lost in join spam.
+        server.getScheduler().performTicks(45);
+
+        assertMessageContains(player, "You received $62.50 while you were offline");
+        verify(pendingPaymentsManager).clearPending(uuid);
+    }
+
+    @Test
+    @DisplayName("a join with no pending payments sends no notice and clears nothing")
+    void joinWithoutPendingPaymentsSaysNothing() {
+        PlayerMock player = server.addPlayer("Bob");
+        UUID uuid = player.getUniqueId();
+        when(pendingPaymentsManager.hasPending(uuid)).thenReturn(false);
+
+        PlayerJoinEvent event = mock(PlayerJoinEvent.class);
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onPlayerJoin(event);
+        server.getScheduler().performTicks(45);
+
+        verify(pendingPaymentsManager, never()).clearPending(uuid);
     }
 
     private static void assertMessageContains(PlayerMock player, String needle) {

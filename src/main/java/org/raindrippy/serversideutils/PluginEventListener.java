@@ -24,6 +24,7 @@ import org.json.simple.JSONObject;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -39,9 +40,13 @@ public class PluginEventListener implements Listener {
     private final CombatManager combatManager;
     private final CombatLogManager combatLogManager;
     private final WarningsManager warningsManager;
+    private final PendingPaymentsManager pendingPaymentsManager;
     private final Set<String> hiddenCommands;
 
     private static final Set<String> COMBAT_BLOCKED = new HashSet<>(Arrays.asList("home", "suicide"));
+
+    /** Individual payment lines shown on join before the rest are collapsed into a summary. */
+    private static final int MAX_PAYMENT_LINES = 5;
 
     public PluginEventListener(Main plugin,
                                AuthService authService,
@@ -53,6 +58,7 @@ public class PluginEventListener implements Listener {
                                CombatManager combatManager,
                                CombatLogManager combatLogManager,
                                WarningsManager warningsManager,
+                               PendingPaymentsManager pendingPaymentsManager,
                                Set<String> hiddenCommands) {
         this.plugin = plugin;
         this.authService = authService;
@@ -64,6 +70,7 @@ public class PluginEventListener implements Listener {
         this.combatManager = combatManager;
         this.combatLogManager = combatLogManager;
         this.warningsManager = warningsManager;
+        this.pendingPaymentsManager = pendingPaymentsManager;
         this.hiddenCommands = hiddenCommands;
     }
 
@@ -81,6 +88,31 @@ public class PluginEventListener implements Listener {
                 player.sendMessage(ChatColor.RED + "You combat-logged last session. This is strike #"
                         + combatLogManager.getStrikes(playerUUID) + ". A formal warning has been filed.");
                 combatLogManager.clearPending(playerUUID);
+            }, 40L);
+        }
+
+        if (pendingPaymentsManager.hasPending(playerUUID)) {
+            // Same 2-second delay as the combat-log notice so it isn't lost in join spam. The money
+            // was already deposited when /sendmoney ran; this only tells them about it.
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (!player.isOnline()) return;
+                List<PendingPaymentsManager.PendingPayment> pending = pendingPaymentsManager.getPending(playerUUID);
+                double total = 0;
+                for (PendingPaymentsManager.PendingPayment payment : pending) {
+                    total += payment.getAmount();
+                }
+                player.sendMessage(ChatColor.GREEN + "You received $" + PluginCommandHandler.formatAmount(total)
+                        + " while you were offline:");
+                for (int i = 0; i < pending.size(); i++) {
+                    if (i == MAX_PAYMENT_LINES) {
+                        player.sendMessage(ChatColor.GRAY + "  ...and " + (pending.size() - i) + " more.");
+                        break;
+                    }
+                    PendingPaymentsManager.PendingPayment payment = pending.get(i);
+                    player.sendMessage(ChatColor.GRAY + "  $" + PluginCommandHandler.formatAmount(payment.getAmount())
+                            + " from " + payment.getFrom());
+                }
+                pendingPaymentsManager.clearPending(playerUUID);
             }, 40L);
         }
 
