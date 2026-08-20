@@ -24,10 +24,10 @@ public class Main extends JavaPlugin {
     private static final String ADMIN_USER = dotenv.get("ADMIN_USER");
     private static final String ADMIN_PWD = dotenv.get("ADMIN_PWD");
 
-    private static final int SEASON = 8;
-    private static final String THEME = "???";
+    private static final int SEASON = 9;
+    private static final String THEME = "S8 reboot";
     private static final boolean DIGITAL_ECONOMY_ENABLED = true;
-    private static final Set<String> HIDDEN_COMMANDS = new HashSet<>(Arrays.asList("sync"));
+    private static final Set<String> HIDDEN_COMMANDS = new HashSet<>(Arrays.asList("sync", "tell", "msg", "w", "whisper", "r", "reply"));
 
     private Economy econ;
 
@@ -117,7 +117,7 @@ public class Main extends JavaPlugin {
         for (String cmd : new String[]{
                 "eventhub", "return", "togglescoreboard", "sendmoney",
                 "warn", "getwarnings", "removewarning", "clearwarnings",
-                "owarn", "oclearwarnings", "oremovewarning",
+                "owarn", "oclearwarnings", "oremovewarning",    
                 "setcounter", "lsrev", "sync"}) {
             this.getCommand(cmd).setExecutor(commandHandler);
             this.getCommand(cmd).setTabCompleter(tabCompleter);
