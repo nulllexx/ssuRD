@@ -26,7 +26,7 @@ public class Main extends JavaPlugin {
 
     private static final int SEASON = 9;
     private static final String THEME = "S8 reboot";
-    private static final boolean DIGITAL_ECONOMY_ENABLED = true;
+    private static final boolean DIGITAL_ECONOMY_ENABLED = false;
     private static final Set<String> HIDDEN_COMMANDS = new HashSet<>(Arrays.asList("sync", "tell", "msg", "w", "whisper", "r", "reply"));
 
     private Economy econ;
