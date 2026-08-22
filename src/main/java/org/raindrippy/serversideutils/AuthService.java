@@ -22,6 +22,7 @@ public class AuthService {
     private final ApiClient apiClient;
     private final CredentialsManager credentialsManager;
     private final CryptoService cryptoService;
+    private final NetworkGuard networkGuard;
     private final Logger logger;
 
     public AuthService(ApiClient apiClient,
@@ -37,6 +38,7 @@ public class AuthService {
         this.apiClient = apiClient;
         this.credentialsManager = credentialsManager;
         this.cryptoService = cryptoService;
+        this.networkGuard = new NetworkGuard(cryptoService);
         // In production Main injects the plugin logger; fall back to a class logger for tests.
         this.logger = (logger != null) ? logger : Logger.getLogger(AuthService.class.getName());
     }
@@ -50,12 +52,20 @@ public class AuthService {
     }
 
     public void freezePlayer(Player player) {
+        freezePlayer(player, "You need to authenticate to access this server.");
+    }
+
+    /**
+     * Freezes the player with a caller-supplied explanation, so a re-sync forced by an unrecognised
+     * network can say so instead of reading like a first-time login prompt.
+     */
+    public void freezePlayer(Player player, String reason) {
         UUID playerUUID = player.getUniqueId();
         frozenPlayers.add(playerUUID);
         player.setGameMode(GameMode.SPECTATOR);
         player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 0));
         player.setWalkSpeed(0.0f);
-        player.sendMessage(ChatColor.RED + "You need to authenticate to access this server.");
+        player.sendMessage(ChatColor.RED + reason);
         player.sendMessage(ChatColor.YELLOW + "Use /sync <username> <password> to authenticate.");
     }
 
@@ -99,9 +109,14 @@ public class AuthService {
                     player.sendMessage(ChatColor.RED + "A server error prevented saving your login. Please contact staff.");
                     return;
                 }
-                JSONObject playerCreds = new JSONObject();
+                // Reuse the existing entry when there is one so previously remembered networks
+                // survive a re-sync instead of being replaced by a fresh object.
+                JSONObject playerCreds = credentialsManager.getCredentials().get(player.getUniqueId());
+                if (playerCreds == null) playerCreds = new JSONObject();
                 playerCreds.put("username", username);
                 playerCreds.put("password", encryptedPassword);
+                // The player just proved the account password from this network; trust it from now on.
+                networkGuard.remember(playerCreds, networkGuard.fingerprint(player));
                 credentialsManager.getCredentials().put(player.getUniqueId(), playerCreds);
                 credentialsManager.save();
 

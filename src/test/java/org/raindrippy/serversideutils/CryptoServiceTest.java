@@ -38,6 +38,25 @@ class CryptoServiceTest {
     }
 
     @Test
+    @DisplayName("hashNetwork is deterministic and distinguishes prefixes")
+    void hashNetworkDeterministic() {
+        CryptoService crypto = new CryptoService(VALID_KEY);
+        assertEquals(crypto.hashNetwork("v4:0a0b0c"), crypto.hashNetwork("v4:0a0b0c"));
+        assertNotEquals(crypto.hashNetwork("v4:0a0b0c"), crypto.hashNetwork("v4:0a0b0d"));
+    }
+
+    @Test
+    @DisplayName("hashNetwork is salted by the key and never echoes it or the prefix")
+    void hashNetworkSalted() {
+        String prefix = "v4:0a0b0c";
+        String hash = new CryptoService(VALID_KEY).hashNetwork(prefix);
+        // A different key must yield a different fingerprint for the same network.
+        assertNotEquals(new CryptoService("fedcba9876543210").hashNetwork(prefix), hash);
+        org.junit.jupiter.api.Assertions.assertFalse(hash.contains(VALID_KEY));
+        org.junit.jupiter.api.Assertions.assertFalse(hash.contains(prefix));
+    }
+
+    @Test
     @DisplayName("encrypt with an invalid-length key throws instead of leaking plaintext")
     void invalidKeyThrows() {
         // A 5-byte key is not a legal AES key length; encryption must fail loudly rather than

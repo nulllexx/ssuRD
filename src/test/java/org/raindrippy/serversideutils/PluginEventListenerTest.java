@@ -8,6 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -28,6 +30,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import org.mockito.Mockito;
 
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
@@ -341,6 +345,100 @@ class PluginEventListenerTest {
 
         verify(scoreboardService).enable(player);
         verify(authService).freezePlayer(player);
+    }
+
+    // ---------- join: network check ----------
+
+    /**
+     * A listener wired with a real {@link CryptoService} (the shared one is a mock) so the network
+     * fingerprints it derives match the ones a test computes for itself.
+     */
+    private PluginEventListener listenerWith(CryptoService realCrypto) {
+        return new PluginEventListener(plugin, authService, credentialsManager, realCrypto,
+                apiClient, scoreboardService, configManager, combatManager, combatLogManager,
+                warningsManager, pendingPaymentsManager, new HashSet<>(List.of("sync")));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    @DisplayName("a join from a remembered network still auto-authenticates")
+    void joinFromKnownNetworkAutoAuthenticates() throws Exception {
+        CryptoService crypto = new CryptoService("0123456789abcdef");
+        NetworkGuard guard = new NetworkGuard(crypto);
+        PlayerMock player = server.addPlayer("Homebody");
+        player.setAddress(new InetSocketAddress(InetAddress.getByName("1.2.3.4"), 25565));
+
+        JSONObject creds = creds("bob");
+        creds.put("password", crypto.encrypt("pw"));
+        guard.remember(creds, guard.fingerprint(player));
+        credsStore.put(player.getUniqueId(), creds);
+
+        when(apiClient.queryStatus("bob", player)).thenReturn(true);
+        when(apiClient.queryLogin("bob", "pw")).thenReturn(true);
+
+        PlayerJoinEvent event = mock(PlayerJoinEvent.class);
+        when(event.getPlayer()).thenReturn(player);
+
+        listenerWith(crypto).onPlayerJoin(event);
+        server.getScheduler().waitAsyncTasksFinished();
+
+        verify(apiClient).queryLogin("bob", "pw");
+        verify(authService, never()).freezePlayer(player);
+        verify(authService, never()).freezePlayer(eq(player), Mockito.anyString());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    @DisplayName("a join from an unrecognised network is frozen and keeps the saved credentials")
+    void joinFromUnknownNetworkRequiresResync() throws Exception {
+        CryptoService crypto = new CryptoService("0123456789abcdef");
+        NetworkGuard guard = new NetworkGuard(crypto);
+        PlayerMock player = server.addPlayer("Traveller");
+        UUID uuid = player.getUniqueId();
+
+        JSONObject creds = creds("bob");
+        creds.put("password", crypto.encrypt("pw"));
+        // Remembered from the home network...
+        player.setAddress(new InetSocketAddress(InetAddress.getByName("1.2.3.4"), 25565));
+        guard.remember(creds, guard.fingerprint(player));
+        credsStore.put(uuid, creds);
+        // ...but joining from somewhere else entirely.
+        player.setAddress(new InetSocketAddress(InetAddress.getByName("9.9.9.9"), 25565));
+
+        PlayerJoinEvent event = mock(PlayerJoinEvent.class);
+        when(event.getPlayer()).thenReturn(player);
+
+        listenerWith(crypto).onPlayerJoin(event);
+        server.getScheduler().waitAsyncTasksFinished();
+
+        verify(authService).freezePlayer(eq(player), Mockito.anyString());
+        // The saved account must survive: the ban pipeline still needs the username.
+        org.junit.jupiter.api.Assertions.assertTrue(credsStore.containsKey(uuid));
+        verify(apiClient, never()).queryLogin(Mockito.anyString(), Mockito.anyString());
+        verify(apiClient, never()).queryStatus(Mockito.anyString(), Mockito.any());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    @DisplayName("a legacy credentials entry with no remembered network requires one re-sync")
+    void legacyEntryRequiresResync() throws Exception {
+        CryptoService crypto = new CryptoService("0123456789abcdef");
+        PlayerMock player = server.addPlayer("Veteran");
+        player.setAddress(new InetSocketAddress(InetAddress.getByName("1.2.3.4"), 25565));
+
+        // Saved before this feature existed -> no "knownNets" key at all.
+        JSONObject creds = creds("bob");
+        creds.put("password", crypto.encrypt("pw"));
+        credsStore.put(player.getUniqueId(), creds);
+
+        PlayerJoinEvent event = mock(PlayerJoinEvent.class);
+        when(event.getPlayer()).thenReturn(player);
+
+        listenerWith(crypto).onPlayerJoin(event);
+        server.getScheduler().waitAsyncTasksFinished();
+
+        verify(authService).freezePlayer(eq(player), Mockito.anyString());
+        verify(apiClient, never()).queryLogin(Mockito.anyString(), Mockito.anyString());
     }
 
     // ---------- offline payment notices ----------

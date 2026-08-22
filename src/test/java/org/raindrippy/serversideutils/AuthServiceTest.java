@@ -9,6 +9,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -100,6 +102,43 @@ class AuthServiceTest {
         assertNotEquals("pass", creds.get("password"));
         assertEquals("pass", cryptoService.decrypt((String) creds.get("password")));
         verify(credentialsManager).save();
+    }
+
+    @Test
+    @DisplayName("handleSync success remembers the network the player synced from")
+    void syncRemembersNetwork() throws Exception {
+        UUID uuid = player.getUniqueId();
+        player.setAddress(new InetSocketAddress(InetAddress.getByName("1.2.3.4"), 25565));
+        authService.freezePlayer(player);
+        when(apiClient.queryCredentials("user", "pass")).thenReturn(ApiClient.LoginResult.SUCCESS);
+
+        authService.handleSync(player, new String[]{"user", "pass"});
+
+        NetworkGuard guard = new NetworkGuard(cryptoService);
+        JSONObject creds = credsStore.get(uuid);
+        assertTrue(guard.isKnown(creds, guard.fingerprint(player)));
+    }
+
+    @Test
+    @DisplayName("re-syncing from a second network keeps the first one remembered")
+    void resyncKeepsEarlierNetwork() throws Exception {
+        UUID uuid = player.getUniqueId();
+        NetworkGuard guard = new NetworkGuard(cryptoService);
+        when(apiClient.queryCredentials("user", "pass")).thenReturn(ApiClient.LoginResult.SUCCESS);
+
+        player.setAddress(new InetSocketAddress(InetAddress.getByName("1.2.3.4"), 25565));
+        authService.freezePlayer(player);
+        authService.handleSync(player, new String[]{"user", "pass"});
+        String homeNetwork = guard.fingerprint(player);
+
+        // Same player, different network: the join path would have re-frozen them.
+        player.setAddress(new InetSocketAddress(InetAddress.getByName("9.9.9.9"), 25565));
+        authService.freezePlayer(player);
+        authService.handleSync(player, new String[]{"user", "pass"});
+
+        JSONObject creds = credsStore.get(uuid);
+        assertTrue(guard.isKnown(creds, homeNetwork), "the original network must survive a re-sync");
+        assertTrue(guard.isKnown(creds, guard.fingerprint(player)));
     }
 
     @Test

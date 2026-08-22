@@ -42,6 +42,7 @@ public class PluginEventListener implements Listener {
     private final WarningsManager warningsManager;
     private final PendingPaymentsManager pendingPaymentsManager;
     private final Set<String> hiddenCommands;
+    private final NetworkGuard networkGuard;
 
     private static final Set<String> COMBAT_BLOCKED = new HashSet<>(Arrays.asList("home", "suicide"));
 
@@ -72,6 +73,7 @@ public class PluginEventListener implements Listener {
         this.warningsManager = warningsManager;
         this.pendingPaymentsManager = pendingPaymentsManager;
         this.hiddenCommands = hiddenCommands;
+        this.networkGuard = new NetworkGuard(cryptoService);
     }
 
     @EventHandler
@@ -120,6 +122,19 @@ public class PluginEventListener implements Listener {
             JSONObject creds = credentialsManager.getCredentials().get(playerUUID);
             String savedUsername = (String) creds.get("username");
             String encryptedPassword = (String) creds.get("password");
+
+            // Saved credentials only auto-authenticate from a network the player has synced from
+            // before. An unfamiliar one (or an address we can't read) falls back to /sync. The
+            // credentials are kept: the ban pipeline still needs the username, and a successful
+            // /sync just refreshes this entry.
+            String fingerprint = networkGuard.fingerprint(player);
+            if (!networkGuard.isKnown(creds, fingerprint)) {
+                plugin.getLogger().warning(player.getName()
+                        + " joined from an unrecognised network; requiring /sync.");
+                authService.freezePlayer(player, "New sign-in location detected. "
+                        + "Please confirm it's you before continuing.");
+                return;
+            }
 
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 try {

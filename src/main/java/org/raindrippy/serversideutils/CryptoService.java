@@ -3,6 +3,7 @@ package org.raindrippy.serversideutils;
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Base64;
 
 public class CryptoService {
@@ -23,6 +24,23 @@ public class CryptoService {
             // Never fall back to returning the plaintext password: a misconfigured key must
             // fail loudly rather than silently persisting credentials in the clear.
             throw new IllegalStateException("Password encryption failed", e);
+        }
+    }
+
+    /**
+     * Returns a stable, non-reversible fingerprint for a network prefix, salted with the AES key so
+     * the stored value is useless outside this server. Used to remember which networks a player has
+     * already authenticated from; raw addresses are never persisted or logged.
+     */
+    public String hashNetwork(String prefix) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(aesKey.getBytes(StandardCharsets.UTF_8));
+            byte[] hashed = digest.digest(prefix.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(hashed);
+        } catch (Exception e) {
+            // Same fail-loud contract as encrypt: never fall back to storing the prefix in the clear.
+            throw new IllegalStateException("Network fingerprinting failed", e);
         }
     }
 
