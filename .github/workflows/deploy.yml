@@ -99,6 +99,40 @@ jobs:
         target: /home/useradmin/mcserver/plugins/
         strip_components: 1
 
+    # The scp above only ADDS a file. Until the version in pom.xml changed, every deploy happened to
+    # reuse the same filename and overwrote in place; the first version bump left two ServerUtils
+    # JARs side by side and Bukkit refused to choose ("Ambiguous plugin name"), silently loading the
+    # older one. Delete every ServerUtils JAR that is not the one we just uploaded.
+    - name: Remove superseded plugin JARs on server
+      uses: appleboy/ssh-action@master
+      env:
+        JAR_NAME: ${{ steps.jar.outputs.name }}
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: 2222
+        envs: JAR_NAME
+        script: |
+          set -e
+          PLUGINS=/home/useradmin/mcserver/plugins
+          NEW="$PLUGINS/$JAR_NAME"
+          # Never prune on the strength of an upload we cannot see: a failed scp must leave the
+          # currently-installed plugin in place rather than empty the directory.
+          if [ ! -s "$NEW" ]; then
+            echo "::error::Expected $NEW after upload, but it is missing or empty. Leaving existing plugin JARs untouched."
+            exit 1
+          fi
+          removed=0
+          for f in "$PLUGINS"/ServerUtils-*.jar; do
+            [ -e "$f" ] || continue
+            if [ "$f" != "$NEW" ]; then
+              rm -v -f -- "$f"
+              removed=$((removed + 1))
+            fi
+          done
+          echo "$JAR_NAME is now the only ServerUtils JAR in $PLUGINS (removed $removed superseded)."
+
     # Write the (validated) secret into the server's real .env so the plugin actually picks it up.
     # Only the AES_KEY line is touched; ADMIN_USER/ADMIN_PWD and any other entries are preserved.
     - name: Sync AES_KEY into the server .env
