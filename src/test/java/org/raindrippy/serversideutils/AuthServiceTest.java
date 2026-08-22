@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.bukkit.GameMode;
+import org.bukkit.potion.PotionEffectType;
 import org.json.simple.JSONObject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,12 +60,22 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("freezePlayer marks the player frozen and puts them in spectator")
+    @DisplayName("freezePlayer marks the player frozen and puts them in adventure mode")
     void freezeMarksFrozen() {
         assertFalse(authService.isFrozen(player.getUniqueId()));
         authService.freezePlayer(player);
         assertTrue(authService.isFrozen(player.getUniqueId()));
-        assertEquals(GameMode.SPECTATOR, player.getGameMode());
+        // Adventure, not spectator: a spectator flies through the waiting chamber's walls and can
+        // use the spectate menu to teleport to a real player.
+        assertEquals(GameMode.ADVENTURE, player.getGameMode());
+    }
+
+    @Test
+    @DisplayName("a frozen player can see and move: no blindness, normal walk speed")
+    void freezeLeavesPlayerMobile() {
+        authService.freezePlayer(player);
+        assertFalse(player.hasPotionEffect(PotionEffectType.BLINDNESS), "the chamber must be visible");
+        assertEquals(0.2f, player.getWalkSpeed(), "the player must be able to walk around it");
     }
 
     @Test

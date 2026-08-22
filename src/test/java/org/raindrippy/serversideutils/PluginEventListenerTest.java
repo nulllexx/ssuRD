@@ -186,6 +186,91 @@ class PluginEventListenerTest {
         verify(event, never()).setCancelled(true);
     }
 
+    @Test
+    @DisplayName("an unauthenticated player's commands are blocked")
+    void frozenCommandsBlocked() {
+        PlayerMock player = server.addPlayer("Parked");
+        when(authService.isFrozen(player.getUniqueId())).thenReturn(true);
+
+        PlayerCommandPreprocessEvent event = mock(PlayerCommandPreprocessEvent.class);
+        when(event.getMessage()).thenReturn("/home");
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onPlayerCommand(event);
+
+        // Otherwise a teleport command walks them straight out of the waiting chamber.
+        verify(event).setCancelled(true);
+        assertMessageContains(player, "authenticate before using commands");
+    }
+
+    @Test
+    @DisplayName("/sync is still allowed while unauthenticated")
+    void frozenSyncStillAllowed() {
+        PlayerMock player = server.addPlayer("Parked2");
+        when(authService.isFrozen(player.getUniqueId())).thenReturn(true);
+
+        PlayerCommandPreprocessEvent event = mock(PlayerCommandPreprocessEvent.class);
+        when(event.getMessage()).thenReturn("/sync bob secret");
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onPlayerCommand(event);
+
+        verify(authService).handleSync(eq(player), aryEq(new String[]{"bob", "secret"}));
+    }
+
+    @Test
+    @DisplayName("an authenticated player's commands are untouched")
+    void unfrozenCommandsAllowed() {
+        PlayerMock player = server.addPlayer("Free");
+        when(authService.isFrozen(player.getUniqueId())).thenReturn(false);
+        when(combatManager.isInCombat(player)).thenReturn(false);
+
+        PlayerCommandPreprocessEvent event = mock(PlayerCommandPreprocessEvent.class);
+        when(event.getMessage()).thenReturn("/home");
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onPlayerCommand(event);
+
+        verify(event, never()).setCancelled(true);
+    }
+
+    // ---------- waiting-chamber leash ----------
+
+    @Test
+    @DisplayName("a position change asks the auth service to keep the player in the chamber")
+    void moveChecksChamber() {
+        PlayerMock player = server.addPlayer("Walker");
+        org.bukkit.World world = server.addSimpleWorld("authhub");
+
+        org.bukkit.event.player.PlayerMoveEvent event =
+                mock(org.bukkit.event.player.PlayerMoveEvent.class);
+        when(event.getFrom()).thenReturn(new org.bukkit.Location(world, 0, 64, 0));
+        when(event.getTo()).thenReturn(new org.bukkit.Location(world, 40, 64, 0));
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onMove(event);
+
+        verify(authService).keepInChamber(player);
+    }
+
+    @Test
+    @DisplayName("looking around does not trigger the chamber check")
+    void lookingAroundIsIgnored() {
+        PlayerMock player = server.addPlayer("Looker");
+        org.bukkit.World world = server.addSimpleWorld("authhub");
+
+        org.bukkit.event.player.PlayerMoveEvent event =
+                mock(org.bukkit.event.player.PlayerMoveEvent.class);
+        // Same block, different yaw: fires constantly and must stay cheap.
+        when(event.getFrom()).thenReturn(new org.bukkit.Location(world, 5.2, 64, 5.2, 0f, 0f));
+        when(event.getTo()).thenReturn(new org.bukkit.Location(world, 5.3, 64, 5.3, 90f, 0f));
+        lenient().when(event.getPlayer()).thenReturn(player);
+
+        listener.onMove(event);
+
+        verify(authService, never()).keepInChamber(org.mockito.ArgumentMatchers.any());
+    }
+
     // ---------- combat tagging ----------
 
     @Test

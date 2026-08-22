@@ -3,6 +3,7 @@ package org.raindrippy.serversideutils;
 import io.github.cdimascio.dotenv.Dotenv;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
+import org.bukkit.GameRule;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -28,6 +29,12 @@ public class Main extends JavaPlugin {
     private static final String THEME = "S8 reboot";
     private static final boolean DIGITAL_ECONOMY_ENABLED = false;
     private static final Set<String> HIDDEN_COMMANDS = new HashSet<>(Arrays.asList("sync", "tell", "msg", "w", "whisper", "r", "reply"));
+    /**
+     * World unauthenticated players are parked in. It must exist on the server (create it with
+     * Multiverse); the plugin turns reducedDebugInfo on for it so the F3 screen there shows no
+     * coordinates. If it is missing, players are still frozen — they are just not moved.
+     */
+    private static final String AUTH_WORLD = "authhub";
 
     private Economy econ;
 
@@ -41,6 +48,7 @@ public class Main extends JavaPlugin {
     private CombatManager combatManager;
     private CombatLogManager combatLogManager;
     private PendingPaymentsManager pendingPaymentsManager;
+    private AuthLocationsManager authLocationsManager;
 
     @Override
     public void onEnable() {
@@ -65,6 +73,10 @@ public class Main extends JavaPlugin {
         pendingPaymentsManager.setup();
         pendingPaymentsManager.load();
 
+        authLocationsManager = new AuthLocationsManager(this);
+        authLocationsManager.setup();
+        authLocationsManager.load();
+
         configManager = new ConfigManager(this);
 
         if (!setupEconomy()) {
@@ -80,7 +92,9 @@ public class Main extends JavaPlugin {
             return;
         }
 
-        authService = new AuthService(apiClient, credentialsManager, cryptoService, getLogger());
+        authService = new AuthService(apiClient, credentialsManager, cryptoService, getLogger(),
+                authLocationsManager, AUTH_WORLD);
+        prepareAuthWorld();
 
         configManager.loadAll();
 
@@ -168,6 +182,7 @@ public class Main extends JavaPlugin {
         if (credentialsManager != null) credentialsManager.save();
         if (combatLogManager != null) combatLogManager.save();
         if (pendingPaymentsManager != null) pendingPaymentsManager.save();
+        if (authLocationsManager != null) authLocationsManager.save();
     }
 
     /**
@@ -185,6 +200,30 @@ public class Main extends JavaPlugin {
         } catch (Throwable t) {
             getLogger().severe("Failed to install command log filter; sensitive commands (e.g. "
                     + "/sync credentials) may leak into server logs: " + t);
+        }
+    }
+
+    /**
+     * Turns on {@code reducedDebugInfo} for the auth world so the F3 screen shows no coordinates
+     * while a player is waiting to authenticate. Done here rather than left to a server admin: the
+     * protection is invisible when it is missing, so the plugin that relies on it sets it itself.
+     */
+    private void prepareAuthWorld() {
+        World authWorld = Bukkit.getWorld(AUTH_WORLD);
+        if (authWorld == null) {
+            getLogger().severe("Auth world '" + AUTH_WORLD + "' not found. Unauthenticated players "
+                    + "will still be frozen, but they stay at their real position and can read their "
+                    + "coordinates. Create the world (e.g. /mv create " + AUTH_WORLD + " normal) and restart.");
+            return;
+        }
+        if (Boolean.TRUE.equals(authWorld.getGameRuleValue(GameRule.REDUCED_DEBUG_INFO))) {
+            return;
+        }
+        if (authWorld.setGameRule(GameRule.REDUCED_DEBUG_INFO, true)) {
+            getLogger().info("Enabled reducedDebugInfo on '" + AUTH_WORLD + "'.");
+        } else {
+            getLogger().severe("Could not enable reducedDebugInfo on '" + AUTH_WORLD
+                    + "'; coordinates will still be visible on F3 while players wait to authenticate.");
         }
     }
 

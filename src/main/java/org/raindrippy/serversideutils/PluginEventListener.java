@@ -3,6 +3,7 @@ package org.raindrippy.serversideutils;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -45,6 +46,9 @@ public class PluginEventListener implements Listener {
     private final NetworkGuard networkGuard;
 
     private static final Set<String> COMBAT_BLOCKED = new HashSet<>(Arrays.asList("home", "suicide"));
+
+    /** The only command an unauthenticated player is allowed to run. */
+    private static final String AUTH_COMMAND = "sync";
 
     /** Individual payment lines shown on join before the rest are collapsed into a summary. */
     private static final int MAX_PAYMENT_LINES = 5;
@@ -187,6 +191,19 @@ public class PluginEventListener implements Listener {
     public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
         String command = event.getMessage().toLowerCase();
         String baseCommand = command.substring(1).split(" ")[0];
+
+        // Parked players may only authenticate. Now that they can walk around the chamber, an
+        // unblocked teleport command from any other plugin (/home, /spawn, /tp) would take them
+        // straight out of it and into the world the auth world exists to keep them out of.
+        if (!AUTH_COMMAND.equals(baseCommand) && authService.isFrozen(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(ChatColor.RED
+                    + "You need to authenticate before using commands.");
+            event.getPlayer().sendMessage(ChatColor.YELLOW
+                    + "Use /sync <username> <password> to authenticate.");
+            return;
+        }
+
         if (hiddenCommands.contains(baseCommand)) {
             event.setCancelled(true);
             handleHiddenCommand(event.getPlayer(), event.getMessage());
@@ -319,11 +336,21 @@ public class PluginEventListener implements Listener {
         Bukkit.getScheduler().runTaskLater(plugin, configManager::savePlayerCount, 10L);
     }
 
+    /**
+     * Movement itself is no longer cancelled — parked players are meant to walk around the waiting
+     * chamber. This only acts as a backstop, pulling back anyone who has left it entirely.
+     */
     @EventHandler
     public void onMove(PlayerMoveEvent event) {
-        Player p = event.getPlayer();
-        if (authService.isFrozen(p.getUniqueId())) {
-            event.setCancelled(true);
+        Location to = event.getTo();
+        if (to == null) return;
+        Location from = event.getFrom();
+        // Looking around is not going anywhere; skip the check unless the block position changed.
+        if (from.getBlockX() == to.getBlockX()
+                && from.getBlockY() == to.getBlockY()
+                && from.getBlockZ() == to.getBlockZ()) {
+            return;
         }
+        authService.keepInChamber(event.getPlayer());
     }
 }

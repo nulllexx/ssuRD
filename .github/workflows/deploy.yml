@@ -160,6 +160,11 @@ jobs:
           rm -f "$tmp"
           echo "AES_KEY synced into $ENV_FILE."
 
+    # Player inventories are only written to disk on quit, on the autosave tick (6000 ticks = 5
+    # minutes by default), and on a clean shutdown. `docker compose restart` allows the default
+    # 10s grace period before SIGKILL, which is not enough for a Minecraft server to finish
+    # saving -- so a deploy could cost every online player up to a full autosave interval of
+    # inventory progress, while world chunks (also written as they unload) survived.
     - name: Restart Minecraft container
       uses: appleboy/ssh-action@master
       with:
@@ -168,8 +173,30 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         port: 2222
         script: |
+          set -e
           cd /home/useradmin/docker
-          docker compose restart minecraft
+
+          # Stop and start rather than restart, so the shutdown gets a grace period long enough
+          # to flush player data and so the exit code can be inspected afterwards.
+          docker compose stop -t 120 minecraft
+
+          CID=$(docker compose ps -aq minecraft || true)
+          CODE=""
+          if [ -n "$CID" ]; then
+            CODE=$(docker inspect -f '{{.State.ExitCode}}' "$CID" 2>/dev/null || true)
+          fi
+          # 137 = SIGKILL: the grace period expired, so the server did not save on the way out.
+          if [ "$CODE" = "137" ]; then
+            echo "::warning::Minecraft was SIGKILLed (exit 137) despite a 120s grace period, so"
+            echo "::warning::player inventories were NOT saved on shutdown. Check that the image"
+            echo "::warning::traps SIGTERM and issues the server 'stop' command."
+          elif [ -z "$CODE" ]; then
+            echo "Could not read Minecraft's exit code; unable to confirm it shut down cleanly."
+          else
+            echo "Minecraft exited cleanly (exit code $CODE); player data was flushed."
+          fi
+
+          docker compose start minecraft
 
     - name: Summary
       run: |
