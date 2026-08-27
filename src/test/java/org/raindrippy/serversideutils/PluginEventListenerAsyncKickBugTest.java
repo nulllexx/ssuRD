@@ -7,7 +7,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -76,8 +75,7 @@ class PluginEventListenerAsyncKickBugTest {
 
         PluginEventListener listener = new PluginEventListener(plugin, authService, credentialsManager,
                 cryptoService, apiClient, scoreboardService, configManager, combatManager,
-                combatLogManager, warningsManager, mock(PendingPaymentsManager.class),
-                new HashSet<>(List.of("sync")));
+                combatLogManager, warningsManager, mock(PendingPaymentsManager.class));
 
         // A REAL PlayerMock enforces Bukkit's main-thread-only kick rule.
         PlayerMock player = server.addPlayer("Repeat");

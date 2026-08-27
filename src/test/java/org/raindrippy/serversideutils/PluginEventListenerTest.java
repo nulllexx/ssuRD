@@ -11,10 +11,8 @@ import static org.mockito.Mockito.when;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
 
@@ -90,10 +88,9 @@ class PluginEventListenerTest {
         lenient().when(credentialsManager.getCredentials()).thenReturn(credsStore);
         lenient().when(authService.getGameModeMap()).thenReturn(gameModeMap);
 
-        Set<String> hiddenCommands = new HashSet<>(List.of("sync"));
         listener = new PluginEventListener(plugin, authService, credentialsManager, cryptoService,
                 apiClient, scoreboardService, configManager, combatManager, combatLogManager,
-                warningsManager, pendingPaymentsManager, hiddenCommands);
+                warningsManager, pendingPaymentsManager);
     }
 
     @AfterEach
@@ -152,6 +149,54 @@ class PluginEventListenerTest {
 
         verify(event).setCancelled(true);
         verify(authService).handleSync(eq(player), aryEq(new String[]{"bob", "secret"}));
+    }
+
+    @Test
+    @DisplayName("a log-censored command like /tell still runs and is not swallowed")
+    void censoredCommandStillRuns() {
+        PlayerMock player = server.addPlayer("Talker");
+        when(authService.isFrozen(player.getUniqueId())).thenReturn(false);
+        when(combatManager.isInCombat(player)).thenReturn(false);
+
+        PlayerCommandPreprocessEvent event = mock(PlayerCommandPreprocessEvent.class);
+        when(event.getMessage()).thenReturn("/tell Bob hello there");
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onPlayerCommand(event);
+
+        // Cancelling would have delivered nothing to Bob; keeping it out of the log files is
+        // CommandLogFilter's job, not this handler's.
+        verify(event, never()).setCancelled(true);
+        assertNoMessageContains(player, "Hidden command processed");
+    }
+
+    @Test
+    @DisplayName("/msg is likewise left alone")
+    void censoredMsgStillRuns() {
+        PlayerMock player = server.addPlayer("Messenger");
+        when(authService.isFrozen(player.getUniqueId())).thenReturn(false);
+        when(combatManager.isInCombat(player)).thenReturn(false);
+
+        PlayerCommandPreprocessEvent event = mock(PlayerCommandPreprocessEvent.class);
+        when(event.getMessage()).thenReturn("/msg Bob hi");
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onPlayerCommand(event);
+
+        verify(event, never()).setCancelled(true);
+    }
+
+    @Test
+    @DisplayName("/sync preserves the case of the password it forwards")
+    void syncPreservesPasswordCase() {
+        PlayerMock player = server.addPlayer("CaseSensitive");
+        PlayerCommandPreprocessEvent event = mock(PlayerCommandPreprocessEvent.class);
+        when(event.getMessage()).thenReturn("/sync Alice MixedCasePw");
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onPlayerCommand(event);
+
+        verify(authService).handleSync(eq(player), aryEq(new String[]{"Alice", "MixedCasePw"}));
     }
 
     @Test
@@ -441,7 +486,7 @@ class PluginEventListenerTest {
     private PluginEventListener listenerWith(CryptoService realCrypto) {
         return new PluginEventListener(plugin, authService, credentialsManager, realCrypto,
                 apiClient, scoreboardService, configManager, combatManager, combatLogManager,
-                warningsManager, pendingPaymentsManager, new HashSet<>(List.of("sync")));
+                warningsManager, pendingPaymentsManager);
     }
 
     @SuppressWarnings("unchecked")
@@ -563,6 +608,15 @@ class PluginEventListenerTest {
         server.getScheduler().performTicks(45);
 
         verify(pendingPaymentsManager, never()).clearPending(uuid);
+    }
+
+    private static void assertNoMessageContains(PlayerMock player, String needle) {
+        String msg;
+        while ((msg = player.nextMessage()) != null) {
+            if (msg.contains(needle)) {
+                org.junit.jupiter.api.Assertions.fail("unexpected message containing '" + needle + "'");
+            }
+        }
     }
 
     private static void assertMessageContains(PlayerMock player, String needle) {

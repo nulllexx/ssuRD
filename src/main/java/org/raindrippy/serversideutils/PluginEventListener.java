@@ -42,7 +42,6 @@ public class PluginEventListener implements Listener {
     private final CombatLogManager combatLogManager;
     private final WarningsManager warningsManager;
     private final PendingPaymentsManager pendingPaymentsManager;
-    private final Set<String> hiddenCommands;
     private final NetworkGuard networkGuard;
 
     private static final Set<String> COMBAT_BLOCKED = new HashSet<>(Arrays.asList("home", "suicide"));
@@ -63,8 +62,7 @@ public class PluginEventListener implements Listener {
                                CombatManager combatManager,
                                CombatLogManager combatLogManager,
                                WarningsManager warningsManager,
-                               PendingPaymentsManager pendingPaymentsManager,
-                               Set<String> hiddenCommands) {
+                               PendingPaymentsManager pendingPaymentsManager) {
         this.plugin = plugin;
         this.authService = authService;
         this.credentialsManager = credentialsManager;
@@ -76,7 +74,6 @@ public class PluginEventListener implements Listener {
         this.combatLogManager = combatLogManager;
         this.warningsManager = warningsManager;
         this.pendingPaymentsManager = pendingPaymentsManager;
-        this.hiddenCommands = hiddenCommands;
         this.networkGuard = new NetworkGuard(cryptoService);
     }
 
@@ -218,35 +215,21 @@ public class PluginEventListener implements Listener {
             return;
         }
 
-        if (hiddenCommands.contains(baseCommand)) {
+        // /sync is handled here instead of through the command map, and cancelled so the username
+        // and password never enter the dispatch path. Every other command runs normally -- keeping
+        // the likes of /tell out of the log files is CommandLogFilter's job, and cancelling them
+        // here silently swallowed the messages instead of just hiding them.
+        if (AUTH_COMMAND.equals(baseCommand)) {
             event.setCancelled(true);
-            handleHiddenCommand(event.getPlayer(), event.getMessage());
+            // Split the original message, not the lower-cased copy: passwords are case-sensitive.
+            String[] parts = event.getMessage().substring(1).split(" ");
+            authService.handleSync(event.getPlayer(), Arrays.copyOfRange(parts, 1, parts.length));
             return;
         }
         if (COMBAT_BLOCKED.contains(baseCommand) && combatManager.isInCombat(event.getPlayer())) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(ChatColor.RED + "You can't use /" + baseCommand
                     + " while in combat! (" + combatManager.getRemainingSeconds(event.getPlayer()) + "s left)");
-        }
-    }
-
-    private void handleHiddenCommand(Player player, String command) {
-        String[] parts = command.substring(1).split(" ");
-        String baseCommand = parts[0];
-        String[] args = Arrays.copyOfRange(parts, 1, parts.length);
-
-        switch (baseCommand.toLowerCase()) {
-            case "sync":
-                authService.handleSync(player, args);
-                break;
-            case "secretcommand":
-                player.sendMessage("Secret command executed silently!");
-                break;
-            case "adminpass":
-                break;
-            default:
-                player.sendMessage("Hidden command processed.");
-                break;
         }
     }
 

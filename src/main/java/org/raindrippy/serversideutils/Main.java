@@ -28,7 +28,13 @@ public class Main extends JavaPlugin {
     private static final int SEASON = 9;
     private static final String THEME = "S8 reboot";
     private static final boolean DIGITAL_ECONOMY_ENABLED = false;
-    private static final Set<String> HIDDEN_COMMANDS = new HashSet<>(Arrays.asList("sync", "tell", "msg", "w", "whisper", "r", "reply"));
+    /**
+     * Commands whose echo is kept out of the console and log files by {@link CommandLogFilter} --
+     * /sync carries a password, the rest carry private messages. They still execute normally; this
+     * list only controls logging.
+     */
+    private static final Set<String> LOG_CENSORED_COMMANDS = new HashSet<>(
+            Arrays.asList("sync", "tell", "msg", "w", "whisper", "r", "reply"));
     /**
      * World unauthenticated players are parked in. It must exist on the server (create it with
      * Multiverse); the plugin turns reducedDebugInfo on for it so the F3 screen there shows no
@@ -117,8 +123,7 @@ public class Main extends JavaPlugin {
         PluginEventListener listener = new PluginEventListener(
                 this, authService, credentialsManager, cryptoService,
                 apiClient, scoreboardService, configManager,
-                combatManager, combatLogManager, warningsManager, pendingPaymentsManager,
-                HIDDEN_COMMANDS);
+                combatManager, combatLogManager, warningsManager, pendingPaymentsManager);
         Bukkit.getPluginManager().registerEvents(listener, this);
 
         if (configManager.isTrackingEnabled()) configManager.savePlayerCount();
@@ -200,7 +205,7 @@ public class Main extends JavaPlugin {
             org.apache.logging.log4j.core.Logger rootLogger =
                     (org.apache.logging.log4j.core.Logger) org.apache.logging.log4j.LogManager
                             .getRootLogger();
-            rootLogger.addFilter(new CommandLogFilter(HIDDEN_COMMANDS));
+            rootLogger.addFilter(new CommandLogFilter(LOG_CENSORED_COMMANDS));
         } catch (Throwable t) {
             getLogger().severe("Failed to install command log filter; sensitive commands (e.g. "
                     + "/sync credentials) may leak into server logs: " + t);
