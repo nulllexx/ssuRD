@@ -23,6 +23,8 @@ public class PluginCommandHandler implements CommandExecutor {
     private final ScoreboardService scoreboardService;
     private final ConfigManager configManager;
     private final PendingPaymentsManager pendingPaymentsManager;
+    private final CredentialsManager credentialsManager;
+    private final AuthService authService;
     private final Economy econ;
     private final boolean digitalEconomyEnabled;
 
@@ -30,18 +32,27 @@ public class PluginCommandHandler implements CommandExecutor {
                                 ScoreboardService scoreboardService,
                                 ConfigManager configManager,
                                 PendingPaymentsManager pendingPaymentsManager,
+                                CredentialsManager credentialsManager,
+                                AuthService authService,
                                 Economy econ,
                                 boolean digitalEconomyEnabled) {
         this.warningsManager = warningsManager;
         this.scoreboardService = scoreboardService;
         this.configManager = configManager;
         this.pendingPaymentsManager = pendingPaymentsManager;
+        this.credentialsManager = credentialsManager;
+        this.authService = authService;
         this.econ = econ;
         this.digitalEconomyEnabled = digitalEconomyEnabled;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        // /unlink is staff maintenance and takes a target by name, so it works from the console
+        // too -- unlike the rest, which act on the sender.
+        if ("unlink".equals(command.getName().toLowerCase())) {
+            return handleUnlink(sender, args);
+        }
         if (!(sender instanceof Player)) {
             sender.sendMessage(ChatColor.RED + "This command can only be run by a player.");
             return true;
@@ -283,6 +294,52 @@ public class PluginCommandHandler implements CommandExecutor {
             sender.sendMessage(ChatColor.GREEN + "Cleared all warnings for " + target.getName());
         } else {
             sender.sendMessage(ChatColor.YELLOW + "No warnings to clear.");
+        }
+        return true;
+    }
+
+    /**
+     * Clears the RainDrippy account a character is bound to, so the next /sync may bind a
+     * different one. This is the only way a character legitimately changes hands, and it is
+     * therefore also the one action that could be used to take one over -- so it is op-gated and
+     * logged with who did it.
+     */
+    private boolean handleUnlink(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("serversideutils.unlink")) {
+            sender.sendMessage(ChatColor.RED + "You don't have permission to use this command.");
+            return true;
+        }
+        if (args.length != 1) {
+            sender.sendMessage(ChatColor.RED + "Usage: /unlink <player>");
+            return true;
+        }
+        OfflinePlayer target = findOfflinePlayer(args[0]);
+        if (target == null) {
+            sender.sendMessage(ChatColor.RED + "Player not found.");
+            return true;
+        }
+
+        UUID uuid = target.getUniqueId();
+        Map<UUID, org.json.simple.JSONObject> credentials = credentialsManager.getCredentials();
+        org.json.simple.JSONObject creds = credentials.get(uuid);
+        if (creds == null) {
+            sender.sendMessage(ChatColor.YELLOW + target.getName() + " is not linked to any account.");
+            return true;
+        }
+
+        String previous = (String) creds.get("username");
+        credentials.remove(uuid);
+        credentialsManager.save();
+        Bukkit.getLogger().warning("[ServerSideUtils] " + sender.getName() + " unlinked "
+                + target.getName() + " from RainDrippy account '" + previous + "'.");
+        sender.sendMessage(ChatColor.GREEN + "Unlinked " + target.getName() + " from '" + previous
+                + "'. The next /sync on that character will bind a new account.");
+
+        // If they are online they are no longer verified, so hold them until they sync again.
+        Player online = Bukkit.getPlayer(uuid);
+        if (online != null && online.isOnline() && !authService.isFrozen(uuid)) {
+            authService.freezePlayer(online,
+                    "Your account link was reset by staff. Please sign in again.");
         }
         return true;
     }

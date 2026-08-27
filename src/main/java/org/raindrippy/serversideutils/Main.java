@@ -125,14 +125,14 @@ public class Main extends JavaPlugin {
 
         PluginCommandHandler commandHandler = new PluginCommandHandler(
                 warningsManager, scoreboardService, configManager, pendingPaymentsManager,
-                econ, DIGITAL_ECONOMY_ENABLED);
+                credentialsManager, authService, econ, DIGITAL_ECONOMY_ENABLED);
 
         CommandTabCompleter tabCompleter = new CommandTabCompleter();
         for (String cmd : new String[]{
                 "eventhub", "return", "togglescoreboard", "sendmoney",
                 "warn", "getwarnings", "removewarning", "clearwarnings",
                 "owarn", "oclearwarnings", "oremovewarning",    
-                "setcounter", "lsrev", "sync"}) {
+                "setcounter", "lsrev", "sync", "unlink"}) {
             this.getCommand(cmd).setExecutor(commandHandler);
             this.getCommand(cmd).setTabCompleter(tabCompleter);
         }
@@ -165,7 +165,11 @@ public class Main extends JavaPlugin {
                         Bukkit.getScheduler().runTaskAsynchronously(Main.this, () -> {
                             if (!apiClient.queryStatus(savedUsername, player)) {
                                 Bukkit.getScheduler().runTask(Main.this, () -> {
-                                    credentialsManager.getCredentials().remove(playerUUID);
+                                    // Invalidate the stored password but KEEP the username binding.
+                                    // Removing the entry would unbind the character, so a banned
+                                    // player could simply sync a fresh RainDrippy account onto it
+                                    // and walk straight back in.
+                                    creds.remove("password");
                                     credentialsManager.save();
                                 });
                             }

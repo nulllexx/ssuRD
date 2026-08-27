@@ -28,6 +28,7 @@ public class CommandTabCompleter implements TabCompleter {
             case "getwarnings":
             case "clearwarnings":
             case "oclearwarnings":
+            case "unlink":
                 if (args.length == 1) {
                     return getAllPlayerNames(args[0]);
                 }

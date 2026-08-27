@@ -127,6 +127,15 @@ public class PluginEventListener implements Listener {
             String savedUsername = (String) creds.get("username");
             String encryptedPassword = (String) creds.get("password");
 
+            // Bound to an account but holding no usable secret (the stored password went stale on
+            // a previous join). They must sign in again -- as the same account, which the binding
+            // in AuthService.handleSync enforces.
+            if (encryptedPassword == null) {
+                authService.freezePlayer(player,
+                        "Your saved login is no longer valid. Please sign in again.");
+                return;
+            }
+
             // Saved credentials only auto-authenticate from a network the player has synced from
             // before. An unfamiliar one (or an address we can't read) falls back to /sync. The
             // credentials are kept: the ban pipeline still needs the username, and a successful
@@ -153,9 +162,14 @@ public class PluginEventListener implements Listener {
                         return;
                     } else {
                         Bukkit.getScheduler().runTask(plugin, () -> {
-                            credentialsManager.getCredentials().remove(playerUUID);
+                            // Drop the stale secret but KEEP the username binding. The usual cause
+                            // is the owner changing their password on the website; deleting the
+                            // whole entry would unbind the character and let the next person to
+                            // join it link their own account instead.
+                            creds.remove("password");
                             credentialsManager.save();
-                            authService.freezePlayer(player);
+                            authService.freezePlayer(player,
+                                    "Your saved login is no longer valid. Please sign in again.");
                         });
                     }
                 } catch (Exception e) {

@@ -152,6 +152,79 @@ class AuthServiceTest {
         assertTrue(guard.isKnown(creds, guard.fingerprint(player)));
     }
 
+    // ---------- account binding ----------
+
+    @Test
+    @DisplayName("a character bound to one account rejects a sync with a different account")
+    void syncRejectsDifferentAccount() {
+        UUID uuid = player.getUniqueId();
+        // Character already linked to 'alice'.
+        authService.freezePlayer(player);
+        when(apiClient.queryCredentials("alice", "pw")).thenReturn(ApiClient.LoginResult.SUCCESS);
+        authService.handleSync(player, new String[]{"alice", "pw"});
+
+        // Someone else on this Minecraft account tries their own, perfectly valid, RainDrippy login.
+        authService.freezePlayer(player);
+        Mockito.lenient().when(apiClient.queryCredentials("mallory", "theirpw"))
+                .thenReturn(ApiClient.LoginResult.SUCCESS);
+
+        authService.handleSync(player, new String[]{"mallory", "theirpw"});
+
+        assertTrue(authService.isFrozen(uuid), "the takeover attempt must not authenticate");
+        assertEquals("alice", credsStore.get(uuid).get("username"), "binding must be unchanged");
+        // Rejected before the API is consulted, so the server is not a credential-checking oracle.
+        verify(apiClient, never()).queryCredentials("mallory", "theirpw");
+    }
+
+    @Test
+    @DisplayName("the bound account can always re-sync, regardless of capitalisation")
+    void syncAcceptsSameAccountAnyCase() {
+        UUID uuid = player.getUniqueId();
+        authService.freezePlayer(player);
+        when(apiClient.queryCredentials("alice", "pw")).thenReturn(ApiClient.LoginResult.SUCCESS);
+        authService.handleSync(player, new String[]{"alice", "pw"});
+
+        authService.freezePlayer(player);
+        when(apiClient.queryCredentials("Alice", "pw")).thenReturn(ApiClient.LoginResult.SUCCESS);
+
+        authService.handleSync(player, new String[]{"Alice", "pw"});
+
+        assertFalse(authService.isFrozen(uuid), "the real owner must not be locked out by case");
+    }
+
+    @Test
+    @DisplayName("an unbound character may be claimed by any valid account")
+    void firstSyncBindsFreely() {
+        UUID uuid = player.getUniqueId();
+        authService.freezePlayer(player);
+        when(apiClient.queryCredentials("newcomer", "pw")).thenReturn(ApiClient.LoginResult.SUCCESS);
+
+        authService.handleSync(player, new String[]{"newcomer", "pw"});
+
+        assertFalse(authService.isFrozen(uuid));
+        assertEquals("newcomer", credsStore.get(uuid).get("username"));
+    }
+
+    @Test
+    @DisplayName("a stale password does not unbind the character")
+    void staledPasswordKeepsBinding() {
+        UUID uuid = player.getUniqueId();
+        authService.freezePlayer(player);
+        when(apiClient.queryCredentials("alice", "pw")).thenReturn(ApiClient.LoginResult.SUCCESS);
+        authService.handleSync(player, new String[]{"alice", "pw"});
+
+        // The join path drops only the secret when the stored password stops working.
+        credsStore.get(uuid).remove("password");
+        authService.freezePlayer(player);
+        Mockito.lenient().when(apiClient.queryCredentials("mallory", "theirpw"))
+                .thenReturn(ApiClient.LoginResult.SUCCESS);
+
+        authService.handleSync(player, new String[]{"mallory", "theirpw"});
+
+        assertTrue(authService.isFrozen(uuid), "a password change must not open the character up");
+        assertEquals("alice", credsStore.get(uuid).get("username"));
+    }
+
     @Test
     @DisplayName("handleSync failure does not store credentials and keeps the player frozen")
     void syncFailure() {

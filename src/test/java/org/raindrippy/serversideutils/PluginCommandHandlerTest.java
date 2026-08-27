@@ -47,6 +47,9 @@ class PluginCommandHandlerTest {
     private ConfigManager configManager;
     private Economy econ;
     private PendingPaymentsManager pendingPaymentsManager;
+    private CredentialsManager credentialsManager;
+    private Map<UUID, org.json.simple.JSONObject> credsStore;
+    private AuthService authService;
     private PluginCommandHandler handler;
 
     @BeforeEach
@@ -60,8 +63,12 @@ class PluginCommandHandlerTest {
         configManager = mock(ConfigManager.class);
         econ = mock(Economy.class);
         pendingPaymentsManager = mock(PendingPaymentsManager.class);
+        credentialsManager = mock(CredentialsManager.class);
+        credsStore = new HashMap<>();
+        Mockito.lenient().when(credentialsManager.getCredentials()).thenReturn(credsStore);
+        authService = mock(AuthService.class);
         handler = new PluginCommandHandler(warningsManager, scoreboardService, configManager,
-                pendingPaymentsManager, econ, true);
+                pendingPaymentsManager, credentialsManager, authService, econ, true);
     }
 
     @AfterEach
@@ -363,5 +370,83 @@ class PluginCommandHandlerTest {
             }
         }
         return false;
+    }
+
+    // ---------- /unlink ----------
+
+    @SuppressWarnings("unchecked")
+    private org.json.simple.JSONObject boundTo(String username) {
+        org.json.simple.JSONObject o = new org.json.simple.JSONObject();
+        o.put("username", username);
+        o.put("password", "encrypted");
+        return o;
+    }
+
+    @Test
+    @DisplayName("/unlink requires permission")
+    void unlinkNoPermission() {
+        PlayerMock alice = server.addPlayer("Alice");
+        PlayerMock bob = server.addPlayer("Bob");
+        credsStore.put(bob.getUniqueId(), boundTo("bobaccount"));
+
+        handler.onCommand(alice, command("unlink"), "unlink", new String[]{"Bob"});
+
+        assertTrue(drainFor(alice, "permission"));
+        assertTrue(credsStore.containsKey(bob.getUniqueId()), "binding must survive");
+        verify(credentialsManager, never()).save();
+    }
+
+    @Test
+    @DisplayName("/unlink clears the binding so a new account can be synced")
+    void unlinkClearsBinding() {
+        PlayerMock alice = server.addPlayer("Alice");
+        PlayerMock bob = server.addPlayer("Bob");
+        alice.addAttachment(plugin, "serversideutils.unlink", true);
+        credsStore.put(bob.getUniqueId(), boundTo("bobaccount"));
+
+        handler.onCommand(alice, command("unlink"), "unlink", new String[]{"Bob"});
+
+        assertFalse(credsStore.containsKey(bob.getUniqueId()));
+        verify(credentialsManager).save();
+        assertTrue(drainFor(alice, "bobaccount"));
+    }
+
+    @Test
+    @DisplayName("/unlink holds the target if they are online, so it takes effect immediately")
+    void unlinkFreezesOnlineTarget() {
+        PlayerMock alice = server.addPlayer("Alice");
+        PlayerMock bob = server.addPlayer("Bob");
+        alice.addAttachment(plugin, "serversideutils.unlink", true);
+        credsStore.put(bob.getUniqueId(), boundTo("bobaccount"));
+        when(authService.isFrozen(bob.getUniqueId())).thenReturn(false);
+
+        handler.onCommand(alice, command("unlink"), "unlink", new String[]{"Bob"});
+
+        verify(authService).freezePlayer(eq(bob), Mockito.anyString());
+    }
+
+    @Test
+    @DisplayName("/unlink on an unlinked player changes nothing")
+    void unlinkUnlinkedPlayer() {
+        PlayerMock alice = server.addPlayer("Alice");
+        server.addPlayer("Bob");
+        alice.addAttachment(plugin, "serversideutils.unlink", true);
+
+        handler.onCommand(alice, command("unlink"), "unlink", new String[]{"Bob"});
+
+        assertTrue(drainFor(alice, "not linked"));
+        verify(credentialsManager, never()).save();
+    }
+
+    @Test
+    @DisplayName("/unlink rejects a wrong argument count")
+    void unlinkWrongArgs() {
+        PlayerMock alice = server.addPlayer("Alice");
+        alice.addAttachment(plugin, "serversideutils.unlink", true);
+
+        handler.onCommand(alice, command("unlink"), "unlink", new String[]{});
+
+        assertTrue(drainFor(alice, "Usage"));
+        verify(credentialsManager, never()).save();
     }
 }

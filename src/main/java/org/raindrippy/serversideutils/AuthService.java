@@ -217,6 +217,15 @@ public class AuthService {
         return recorded;
     }
 
+    /**
+     * The RainDrippy account this character is bound to, or null if it has never been synced.
+     * The binding outlives a stale password: only staff (/unlink) may re-point it.
+     */
+    private String boundUsername(UUID playerUUID) {
+        JSONObject creds = credentialsManager.getCredentials().get(playerUUID);
+        return (creds == null) ? null : (String) creds.get("username");
+    }
+
     @SuppressWarnings("unchecked")
     public void handleSync(Player player, String[] args) {
         if (args.length != 2) {
@@ -229,6 +238,22 @@ public class AuthService {
         }
         String username = args[0];
         String password = args[1];
+
+        // A character stays bound to the RainDrippy account it was first synced with. Without this
+        // the guard only proves "you own some member account", so anyone who got hold of the
+        // Minecraft account could sync their own login and play this character -- exactly the
+        // takeover the sync system exists to stop. Checked before the API call so the server is
+        // not usable as a credential-checking oracle for arbitrary accounts.
+        String boundUsername = boundUsername(player.getUniqueId());
+        if (boundUsername != null && !boundUsername.equalsIgnoreCase(username)) {
+            logger.warning("Rejected /sync for " + player.getName() + ": character is bound to a"
+                    + " different RainDrippy account (attempted '" + username + "').");
+            player.sendMessage(ChatColor.RED + "This character is linked to a different RainDrippy account.");
+            player.sendMessage(ChatColor.YELLOW + "Sign in with the account you first synced with, "
+                    + "or ask staff to unlink it.");
+            return;
+        }
+
         ApiClient.LoginResult result = apiClient.queryCredentials(username, password);
         switch (result) {
             case SUCCESS:

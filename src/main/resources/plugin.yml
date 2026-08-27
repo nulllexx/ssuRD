@@ -75,6 +75,11 @@ commands:
     usage: /sync <username> <password>
     permission: serversideutils.sync
 
+  unlink:
+    description: Clear the RainDrippy account a character is bound to.
+    usage: /unlink <player>
+    permission: serversideutils.unlink
+
 permissions:
   serversideutils.*:
     description: Gives access to all ServerSideUtils commands
@@ -90,6 +95,7 @@ permissions:
       serversideutils.setcounter: true
       serversideutils.lsrev: true
       serversideutils.sync: true
+      serversideutils.unlink: true
 
   serversideutils.eventhub:
     description: Allows use of /eventhub
@@ -133,4 +139,8 @@ permissions:
 
   serversideutils.lsrev:
     description: Allows use of /lsrev
+    default: op
+
+  serversideutils.unlink:
+    description: Allows clearing a character's RainDrippy account binding
     default: op
