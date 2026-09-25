@@ -50,6 +50,7 @@ class PluginCommandHandlerTest {
     private CredentialsManager credentialsManager;
     private Map<UUID, org.json.simple.JSONObject> credsStore;
     private AuthService authService;
+    private CombatLogManager combatLogManager;
     private PluginCommandHandler handler;
 
     @BeforeEach
@@ -67,8 +68,9 @@ class PluginCommandHandlerTest {
         credsStore = new HashMap<>();
         Mockito.lenient().when(credentialsManager.getCredentials()).thenReturn(credsStore);
         authService = mock(AuthService.class);
+        combatLogManager = mock(CombatLogManager.class);
         handler = new PluginCommandHandler(warningsManager, scoreboardService, configManager,
-                pendingPaymentsManager, credentialsManager, authService, econ, true);
+            pendingPaymentsManager, combatLogManager, credentialsManager, authService, econ, true);
     }
 
     @AfterEach
