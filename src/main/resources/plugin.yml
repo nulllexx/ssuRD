@@ -79,6 +79,11 @@ commands:
     description: Clear the RainDrippy account a character is bound to.
     usage: /unlink <player>
     permission: serversideutils.unlink
+  
+  removestrike:
+    description: Remove a combat log strike from a player.
+    usage: /removestrike <player> <number|all>
+    permission: serversideutils.removestrike
 
 permissions:
   serversideutils.*:
@@ -96,7 +101,7 @@ permissions:
       serversideutils.lsrev: true
       serversideutils.sync: true
       serversideutils.unlink: true
-
+      serversideutils.removestrike: true
   serversideutils.eventhub:
     description: Allows use of /eventhub
     default: true
@@ -143,4 +148,8 @@ permissions:
 
   serversideutils.unlink:
     description: Allows clearing a character's RainDrippy account binding
+    default: op
+
+  serversideutils.removestrike:
+    description: Allows removing combat log strikes from a player
     default: op

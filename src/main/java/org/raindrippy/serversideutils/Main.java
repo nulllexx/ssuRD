@@ -130,14 +130,14 @@ public class Main extends JavaPlugin {
 
         PluginCommandHandler commandHandler = new PluginCommandHandler(
                 warningsManager, scoreboardService, configManager, pendingPaymentsManager,
-                credentialsManager, authService, econ, DIGITAL_ECONOMY_ENABLED);
+                combatLogManager, credentialsManager, authService, econ, DIGITAL_ECONOMY_ENABLED);
 
         CommandTabCompleter tabCompleter = new CommandTabCompleter();
         for (String cmd : new String[]{
                 "eventhub", "return", "togglescoreboard", "sendmoney",
                 "warn", "getwarnings", "removewarning", "clearwarnings",
                 "owarn", "oclearwarnings", "oremovewarning",    
-                "setcounter", "lsrev", "sync", "unlink"}) {
+                "setcounter", "lsrev", "sync", "unlink", "removestrike"}) {
             this.getCommand(cmd).setExecutor(commandHandler);
             this.getCommand(cmd).setTabCompleter(tabCompleter);
         }

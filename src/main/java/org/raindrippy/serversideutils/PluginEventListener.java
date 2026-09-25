@@ -305,7 +305,7 @@ public class PluginEventListener implements Listener {
             int n = combatLogManager.recordStrike(uuid);
             warningsManager.getWarnings()
                     .computeIfAbsent(uuid, k -> new ArrayList<>())
-                    .add("Combat logging (strike #" + n + ")");
+                    .add(CombatLogManager.warningText(n));
             warningsManager.save();
             combatManager.clearCombat(player);
             plugin.getLogger().warning(player.getName() + " combat-logged (strike #" + n + ").");

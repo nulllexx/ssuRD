@@ -79,7 +79,13 @@ public class CommandTabCompleter implements TabCompleter {
                     return placeholder("<password>");
                 }
                 return Collections.emptyList();
-
+            case "removestrike":
+                if (args.length == 1) {
+                    return getAllPlayerNames(args[0]);
+                } else if (args.length == 2) {
+                    return filterByPrefix(Arrays.asList("all", "<number>"), args[1]);
+                }
+                return Collections.emptyList();
             default:
                 return Collections.emptyList();
         }

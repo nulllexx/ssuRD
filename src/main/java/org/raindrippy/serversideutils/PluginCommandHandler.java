@@ -27,11 +27,13 @@ public class PluginCommandHandler implements CommandExecutor {
     private final AuthService authService;
     private final Economy econ;
     private final boolean digitalEconomyEnabled;
+    private final CombatLogManager combatLogManager;
 
     public PluginCommandHandler(WarningsManager warningsManager,
                                 ScoreboardService scoreboardService,
                                 ConfigManager configManager,
                                 PendingPaymentsManager pendingPaymentsManager,
+                                CombatLogManager combatLogManager,
                                 CredentialsManager credentialsManager,
                                 AuthService authService,
                                 Economy econ,
@@ -44,6 +46,7 @@ public class PluginCommandHandler implements CommandExecutor {
         this.authService = authService;
         this.econ = econ;
         this.digitalEconomyEnabled = digitalEconomyEnabled;
+        this.combatLogManager = combatLogManager;
     }
 
     @Override
@@ -52,6 +55,9 @@ public class PluginCommandHandler implements CommandExecutor {
         // too -- unlike the rest, which act on the sender.
         if ("unlink".equals(command.getName().toLowerCase())) {
             return handleUnlink(sender, args);
+        }
+        if ("removestrike".equals(command.getName().toLowerCase())) {
+            return handleRemoveStrike(sender, args);
         }
         if (!(sender instanceof Player)) {
             sender.sendMessage(ChatColor.RED + "This command can only be run by a player.");
@@ -117,6 +123,80 @@ public class PluginCommandHandler implements CommandExecutor {
             } else {
                 player.sendMessage(ChatColor.RED + "The main world could not be found. Please contact an administrator.");
             }
+        }
+        return true;
+    }
+
+    private boolean handleRemoveStrike(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("serversideutils.removestrike")) {
+            sender.sendMessage(ChatColor.RED + "You don't have permission to use this command.");
+            return true;
+        }
+        if (args.length < 1 || args.length > 2) {
+            sender.sendMessage(ChatColor.RED + "Usage: /removestrike <player> [number|all]");
+            return true;
+        }
+        OfflinePlayer target = findOfflinePlayer(args[0]);
+        if (target == null) {
+            sender.sendMessage(ChatColor.RED + "Player not found.");
+            return true;
+        }
+        UUID uuid = target.getUniqueId();
+        String name = target.getName() != null ? target.getName() : args[0];
+
+        int count = combatLogManager.getStrikes(uuid);
+        if (count == 0) {
+            sender.sendMessage(ChatColor.YELLOW + name + " has no combat-log strikes.");
+            return true;
+        }
+
+        Map<UUID, List<String>> warningsMap = warningsManager.getWarnings();
+        List<String> warnings = warningsMap.getOrDefault(uuid, new ArrayList<>());
+        String arg = args.length == 2 ? args[1].toLowerCase() : null;
+
+        int warningsRemoved;
+        String summary;
+        if ("all".equals(arg)) {
+            combatLogManager.clearStrikes(uuid);
+            warningsRemoved = CombatLogManager.removeAllStrikeWarnings(warnings);
+            summary = "all " + count + " combat-log strike(s)";
+        } else {
+            int strike;
+            if (arg == null) {
+                strike = count;
+            } else {
+                try {
+                    strike = Integer.parseInt(arg);
+                } catch (NumberFormatException e) {
+                    sender.sendMessage(ChatColor.RED + "Strike must be a number or 'all'.");
+                    return true;
+                }
+            }
+            if (!combatLogManager.removeStrike(uuid, strike)) {
+                sender.sendMessage(ChatColor.RED + "Invalid strike number. " + name
+                        + " has strike(s) 1-" + count + ".");
+                return true;
+            }
+            warningsRemoved = CombatLogManager.removeStrikeWarning(warnings, strike);
+            summary = "combat-log strike #" + strike;
+        }
+
+        if (warnings.isEmpty()) warningsMap.remove(uuid);
+        warningsManager.save();
+
+        int remaining = combatLogManager.getStrikes(uuid);
+        sender.sendMessage(ChatColor.GREEN + "Removed " + summary + " from " + name
+                + " (" + warningsRemoved + " warning(s) removed, " + remaining + " strike(s) left).");
+        if (warningsRemoved == 0) {
+            // The warning may have been cleared by hand already; the strike count is still fixed.
+            sender.sendMessage(ChatColor.GRAY + "No matching warning was found; it may already have been removed.");
+        }
+        Bukkit.getLogger().info("[ServerSideUtils] " + sender.getName() + " removed " + summary
+                + " from " + name + "; " + remaining + " strike(s) remain.");
+
+        Player online = target.getPlayer();
+        if (online != null && online.isOnline()) {
+            online.sendMessage(ChatColor.GREEN + "A combat-log strike on your record was removed by staff.");
         }
         return true;
     }

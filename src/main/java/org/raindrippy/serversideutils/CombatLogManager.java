@@ -8,12 +8,19 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class CombatLogManager {
+    /** Matches the warning filed for a strike; must stay in step with {@link #warningText(int)}. */
+    private static final Pattern STRIKE_WARNING = Pattern.compile("^Combat logging \\(strike #(\\d+)\\)$");
+
     private final JavaPlugin plugin;
     private File strikesFile;
     private FileConfiguration strikesConfig;
@@ -83,5 +90,85 @@ public class CombatLogManager {
     public void clearPending(UUID uuid) {
         pendingNotify.remove(uuid);
         save();
+    }
+
+    /**
+     * Removes one strike. Strikes are just a count, so removing #k means the ones after it move
+     * down a place; {@link #removeStrikeWarning} renumbers their warnings to match.
+     *
+     * @return false if the player has no such strike
+     */
+    public boolean removeStrike(UUID uuid, int strike) {
+        int count = getStrikes(uuid);
+        if (strike < 1 || strike > count) return false;
+        // The pending join notice is about the latest strike. If that is the one being struck
+        // off, the player shouldn't log in to a message about it.
+        if (strike == count) pendingNotify.remove(uuid);
+        setCount(uuid, count - 1);
+        save();
+        return true;
+    }
+
+    /** Removes every strike the player has. Returns how many there were. */
+    public int clearStrikes(UUID uuid) {
+        Integer removed = strikes.remove(uuid);
+        pendingNotify.remove(uuid);
+        save();
+        return removed == null ? 0 : removed;
+    }
+
+    private void setCount(UUID uuid, int count) {
+        if (count <= 0) {
+            strikes.remove(uuid);
+            pendingNotify.remove(uuid);
+        } else {
+            strikes.put(uuid, count);
+        }
+    }
+
+    // ---- Warnings filed for strikes ---------------------------------------------------------
+
+    /** The warning text filed for a strike. The listener uses this so the format lives in one place. */
+    public static String warningText(int strike) {
+        return "Combat logging (strike #" + strike + ")";
+    }
+
+    /** The strike number a warning was filed for, or -1 if it isn't a combat-log warning. */
+    static int strikeNumberOf(String warning) {
+        if (warning == null) return -1;
+        Matcher m = STRIKE_WARNING.matcher(warning);
+        if (!m.matches()) return -1;
+        try {
+            return Integer.parseInt(m.group(1));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * Removes the warning for {@code strike} and renumbers the warnings for later strikes down by
+     * one, keeping them in step with {@link #removeStrike}. Other warnings are left alone.
+     *
+     * @return how many warnings were removed
+     */
+    static int removeStrikeWarning(List<String> warnings, int strike) {
+        int removed = 0;
+        for (ListIterator<String> it = warnings.listIterator(); it.hasNext(); ) {
+            int n = strikeNumberOf(it.next());
+            if (n == strike) {
+                it.remove();
+                removed++;
+            } else if (n > strike) {
+                it.set(warningText(n - 1));
+            }
+        }
+        return removed;
+    }
+
+    /** Removes every combat-log warning. Returns how many were removed. */
+    static int removeAllStrikeWarnings(List<String> warnings) {
+        int before = warnings.size();
+        warnings.removeIf(w -> strikeNumberOf(w) > 0);
+        return before - warnings.size();
     }
 }
