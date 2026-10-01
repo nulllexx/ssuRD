@@ -108,6 +108,16 @@ class CommandTabCompleterTest {
     }
 
     @Test
+    @DisplayName("ping suggests online players only to senders with ping.others")
+    void pingCompletionGatedByPermission() {
+        server.addPlayer("Alice");
+        assertTrue(complete("ping", "").isEmpty());
+
+        when(sender.hasPermission("serversideutils.ping.others")).thenReturn(true);
+        assertEquals(List.of("Alice"), complete("ping", "al"));
+    }
+
+    @Test
     @DisplayName("an unrecognized command returns no completions")
     void unknownCommandEmpty() {
         assertTrue(complete("flyaway", "x").isEmpty());

@@ -96,6 +96,19 @@ class AuthLocationsManagerTest {
     }
 
     @Test
+    @DisplayName("replacing the location keeps the recorded gamemode and persists")
+    void replaceLocationKeepsGameMode() {
+        UUID uuid = UUID.randomUUID();
+        freshManager().recordIfAbsent(uuid, new Location(overworld, 100, 64, 100), GameMode.SURVIVAL);
+        AuthLocationsManager mgr = reload();
+        mgr.replaceLocation(uuid, new Location(overworld, 7, 65, 8));
+
+        AuthLocationsManager reloaded = reload();
+        assertEquals(7, reloaded.getOrigin(uuid).getX());
+        assertEquals(GameMode.SURVIVAL, reloaded.getGameMode(uuid));
+    }
+
+    @Test
     @DisplayName("clearing an origin removes it from disk too")
     void clearRemovesEntry() {
         UUID uuid = UUID.randomUUID();

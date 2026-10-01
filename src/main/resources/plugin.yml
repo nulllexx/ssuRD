@@ -3,6 +3,8 @@ version: 11.3
 main: org.raindrippy.serversideutils.Main
 api-version: 1.21
 depend: [Vault]
+# Load after Essentials so its joke /ping ("Pong!") yields the label to ours.
+softdepend: [Essentials]
 
 commands:
   eventhub:
@@ -85,6 +87,11 @@ commands:
     usage: /removestrike <player> <number|all>
     permission: serversideutils.removestrike
 
+  ping:
+    description: Show your latency and the server's TPS/MSPT.
+    usage: /ping [player]
+    permission: serversideutils.ping
+
 permissions:
   serversideutils.*:
     description: Gives access to all ServerSideUtils commands
@@ -102,6 +109,8 @@ permissions:
       serversideutils.sync: true
       serversideutils.unlink: true
       serversideutils.removestrike: true
+      serversideutils.ping: true
+      serversideutils.ping.others: true
   serversideutils.eventhub:
     description: Allows use of /eventhub
     default: true
@@ -152,4 +161,12 @@ permissions:
 
   serversideutils.removestrike:
     description: Allows removing combat log strikes from a player
+    default: op
+
+  serversideutils.ping:
+    description: Allows use of /ping to see your own latency and server TPS
+    default: true
+
+  serversideutils.ping.others:
+    description: Allows checking another player's ping with /ping <player>
     default: op

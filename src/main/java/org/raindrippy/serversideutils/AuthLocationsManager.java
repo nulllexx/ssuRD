@@ -137,6 +137,20 @@ public class AuthLocationsManager {
         save();
     }
 
+    /**
+     * Replaces the recorded position, keeping the recorded gamemode (or recording none if there was
+     * no entry). Used when the recorded position turns out to be wrong -- a player frozen while dead
+     * was recorded at their death spot, but should return to where they would have respawned.
+     */
+    public void replaceLocation(UUID uuid, Location location) {
+        if (uuid == null || location == null || location.getWorld() == null) return;
+        Origin existing = origins.get(uuid);
+        GameMode gameMode = (existing == null) ? null : existing.gameMode;
+        origins.put(uuid, new Origin(location.getWorld().getName(), location.getX(), location.getY(),
+                location.getZ(), location.getYaw(), location.getPitch(), gameMode));
+        save();
+    }
+
     /** True if an origin was recorded, even when the world it referred to no longer exists. */
     public boolean hasOrigin(UUID uuid) {
         return origins.containsKey(uuid);

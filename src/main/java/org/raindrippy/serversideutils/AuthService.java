@@ -125,7 +125,33 @@ public class AuthService {
         if (authWorld.equals(player.getWorld())) return;
 
         authLocations.recordIfAbsent(player.getUniqueId(), player.getLocation(), previousMode);
+        // A dead player (rejoined on the death screen) can't be teleported, and the respawn that
+        // follows would put them back in the overworld anyway. redirectRespawn moves them instead.
+        if (player.isDead()) return;
         player.teleport(authWorld.getSpawnLocation());
+    }
+
+    /**
+     * Keeps a frozen player's respawn inside the auth world. Without this, a player who logs out
+     * on the death screen and is frozen on rejoin (new network, stale login) respawns at their bed
+     * or world spawn in the overworld -- still unauthenticated, but free of the chamber.
+     *
+     * @param respawnLocation where the server would otherwise respawn them
+     * @return the auth world spawn, or null to leave the respawn alone
+     */
+    public Location redirectRespawn(Player player, Location respawnLocation) {
+        if (authLocations == null || authWorldName == null || !isFrozen(player.getUniqueId())) return null;
+        World authWorld = Bukkit.getWorld(authWorldName);
+        if (authWorld == null) return null;
+
+        // Died outside the auth world: the origin recorded at freeze time is the death spot.
+        // Return them on /sync to where this respawn would have put them, as a normal respawn
+        // would, rather than straight back to their dropped items. A player who died inside the
+        // auth world still has their real origin on record, so it is left untouched.
+        if (!authWorld.equals(player.getWorld()) && respawnLocation != null) {
+            authLocations.replaceLocation(player.getUniqueId(), respawnLocation);
+        }
+        return authWorld.getSpawnLocation();
     }
 
     /**

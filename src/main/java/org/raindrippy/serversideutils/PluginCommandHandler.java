@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.UUID;
 
 public class PluginCommandHandler implements CommandExecutor {
@@ -28,6 +29,7 @@ public class PluginCommandHandler implements CommandExecutor {
     private final Economy econ;
     private final boolean digitalEconomyEnabled;
     private final CombatLogManager combatLogManager;
+    private final TickMonitor tickMonitor;
 
     public PluginCommandHandler(WarningsManager warningsManager,
                                 ScoreboardService scoreboardService,
@@ -37,7 +39,8 @@ public class PluginCommandHandler implements CommandExecutor {
                                 CredentialsManager credentialsManager,
                                 AuthService authService,
                                 Economy econ,
-                                boolean digitalEconomyEnabled) {
+                                boolean digitalEconomyEnabled,
+                                TickMonitor tickMonitor) {
         this.warningsManager = warningsManager;
         this.scoreboardService = scoreboardService;
         this.configManager = configManager;
@@ -47,6 +50,7 @@ public class PluginCommandHandler implements CommandExecutor {
         this.econ = econ;
         this.digitalEconomyEnabled = digitalEconomyEnabled;
         this.combatLogManager = combatLogManager;
+        this.tickMonitor = tickMonitor;
     }
 
     @Override
@@ -58,6 +62,9 @@ public class PluginCommandHandler implements CommandExecutor {
         }
         if ("removestrike".equals(command.getName().toLowerCase())) {
             return handleRemoveStrike(sender, args);
+        }
+        if ("ping".equals(command.getName().toLowerCase())) {
+            return handlePing(sender, args);
         }
         if (!(sender instanceof Player)) {
             sender.sendMessage(ChatColor.RED + "This command can only be run by a player.");
@@ -125,6 +132,77 @@ public class PluginCommandHandler implements CommandExecutor {
             }
         }
         return true;
+    }
+
+    private boolean handlePing(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("serversideutils.ping")) {
+            sender.sendMessage(ChatColor.RED + "You don't have permission to use this command.");
+            return true;
+        }
+        if (args.length > 1) {
+            sender.sendMessage(ChatColor.RED + "Usage: /ping [player]");
+            return true;
+        }
+
+        if (args.length == 1) {
+            boolean self = sender instanceof Player && sender.getName().equalsIgnoreCase(args[0]);
+            if (!self && !sender.hasPermission("serversideutils.ping.others")) {
+                sender.sendMessage(ChatColor.RED + "You don't have permission to check other players' ping.");
+                return true;
+            }
+            Player target = Bukkit.getPlayerExact(args[0]);
+            if (target == null) {
+                sender.sendMessage(ChatColor.RED + args[0] + " is not online.");
+                return true;
+            }
+            sender.sendMessage(ChatColor.GOLD + (self ? "Your ping: " : target.getName() + "'s ping: ")
+                    + formatPing(target.getPing()));
+        } else if (sender instanceof Player) {
+            sender.sendMessage(ChatColor.GOLD + "Your ping: " + formatPing(((Player) sender).getPing()));
+        }
+
+        sender.sendMessage(serverStatusLine());
+        return true;
+    }
+
+    private String serverStatusLine() {
+        StringBuilder line = new StringBuilder(ChatColor.GOLD + "Server: " + ChatColor.GRAY + "TPS ");
+        int[] windows = {5, 60, 300};
+        for (int i = 0; i < windows.length; i++) {
+            if (i > 0) line.append(ChatColor.GRAY).append(", ");
+            OptionalDouble tps = tickMonitor.getTps(windows[i]);
+            line.append(tps.isPresent()
+                    ? tpsColor(tps.getAsDouble()) + String.format("%.1f", tps.getAsDouble())
+                    : ChatColor.GRAY + "--");
+        }
+        line.append(ChatColor.GRAY).append(" (5s, 1m, 5m) | MSPT ");
+        OptionalDouble mspt = tickMonitor.getMspt();
+        line.append(mspt.isPresent()
+                ? msptColor(mspt.getAsDouble()) + String.format("%.1fms", mspt.getAsDouble())
+                : ChatColor.GRAY + "n/a");
+        return line.toString();
+    }
+
+    private static String formatPing(int ping) {
+        return pingColor(ping) + "" + ping + "ms";
+    }
+
+    static ChatColor pingColor(int ping) {
+        if (ping < 100) return ChatColor.GREEN;
+        if (ping < 250) return ChatColor.YELLOW;
+        return ChatColor.RED;
+    }
+
+    static ChatColor tpsColor(double tps) {
+        if (tps >= 18.0) return ChatColor.GREEN;
+        if (tps >= 15.0) return ChatColor.YELLOW;
+        return ChatColor.RED;
+    }
+
+    static ChatColor msptColor(double mspt) {
+        if (mspt <= 40.0) return ChatColor.GREEN;
+        if (mspt <= 50.0) return ChatColor.YELLOW;
+        return ChatColor.RED;
     }
 
     private boolean handleRemoveStrike(CommandSender sender, String[] args) {

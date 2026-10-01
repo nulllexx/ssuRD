@@ -19,6 +19,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.projectiles.ProjectileSource;
 import org.json.simple.JSONObject;
 
@@ -331,6 +332,19 @@ public class PluginEventListener implements Listener {
             }
         }
         Bukkit.getScheduler().runTaskLater(plugin, configManager::savePlayerCount, 10L);
+    }
+
+    /**
+     * HIGHEST so respawn plugins (Essentials respawn-at-home, Multiverse) can't send a frozen
+     * player back out of the auth world after us -- and so the location we record as their
+     * origin is the one those plugins settled on.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onRespawn(PlayerRespawnEvent event) {
+        Location authSpawn = authService.redirectRespawn(event.getPlayer(), event.getRespawnLocation());
+        if (authSpawn != null) {
+            event.setRespawnLocation(authSpawn);
+        }
     }
 
     /**

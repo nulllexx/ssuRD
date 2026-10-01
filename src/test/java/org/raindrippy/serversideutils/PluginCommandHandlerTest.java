@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 
 import net.milkbowl.vault.economy.Economy;
@@ -70,7 +71,8 @@ class PluginCommandHandlerTest {
         authService = mock(AuthService.class);
         combatLogManager = mock(CombatLogManager.class);
         handler = new PluginCommandHandler(warningsManager, scoreboardService, configManager,
-            pendingPaymentsManager, combatLogManager, credentialsManager, authService, econ, true);
+            pendingPaymentsManager, combatLogManager, credentialsManager, authService, econ, true,
+            new TickMonitor(() -> 0L, TickMonitor.MsptSource.NONE));
     }
 
     @AfterEach
@@ -450,5 +452,106 @@ class PluginCommandHandlerTest {
 
         assertTrue(drainFor(alice, "Usage"));
         verify(credentialsManager, never()).save();
+    }
+
+    // ----- /ping -----
+
+    @Test
+    @DisplayName("/ping shows the sender's own ping and the server line")
+    void pingSelf() {
+        PlayerMock alice = server.addPlayer("Alice");
+        alice.addAttachment(plugin, "serversideutils.ping", true);
+
+        handler.onCommand(alice, command("ping"), "ping", new String[]{});
+
+        assertTrue(alice.nextMessage().contains("Your ping: "));
+        String serverLine = alice.nextMessage();
+        assertTrue(serverLine.contains("TPS"));
+        assertTrue(serverLine.contains("MSPT"));
+    }
+
+    @Test
+    @DisplayName("/ping without the base permission is denied")
+    void pingNoPermission() {
+        PlayerMock alice = server.addPlayer("Alice");
+
+        handler.onCommand(alice, command("ping"), "ping", new String[]{});
+
+        assertTrue(drainFor(alice, "permission"));
+    }
+
+    @Test
+    @DisplayName("/ping <other> without ping.others is denied")
+    void pingOthersDenied() {
+        PlayerMock alice = server.addPlayer("Alice");
+        server.addPlayer("Bob");
+        alice.addAttachment(plugin, "serversideutils.ping", true);
+
+        handler.onCommand(alice, command("ping"), "ping", new String[]{"Bob"});
+
+        assertTrue(drainFor(alice, "permission"));
+    }
+
+    @Test
+    @DisplayName("/ping <own name> works without ping.others")
+    void pingOwnName() {
+        PlayerMock alice = server.addPlayer("Alice");
+        alice.addAttachment(plugin, "serversideutils.ping", true);
+
+        handler.onCommand(alice, command("ping"), "ping", new String[]{"alice"});
+
+        assertTrue(alice.nextMessage().contains("Your ping: "));
+    }
+
+    @Test
+    @DisplayName("/ping <other> with ping.others shows their ping")
+    void pingOthersAllowed() {
+        PlayerMock alice = server.addPlayer("Alice");
+        server.addPlayer("Bob");
+        alice.addAttachment(plugin, "serversideutils.ping", true);
+        alice.addAttachment(plugin, "serversideutils.ping.others", true);
+
+        handler.onCommand(alice, command("ping"), "ping", new String[]{"Bob"});
+
+        assertTrue(alice.nextMessage().contains("Bob's ping: "));
+    }
+
+    @Test
+    @DisplayName("/ping <offline player> reports they are not online")
+    void pingOfflineTarget() {
+        PlayerMock alice = server.addPlayer("Alice");
+        alice.addAttachment(plugin, "serversideutils.ping", true);
+        alice.addAttachment(plugin, "serversideutils.ping.others", true);
+
+        handler.onCommand(alice, command("ping"), "ping", new String[]{"Ghost"});
+
+        assertTrue(drainFor(alice, "not online"));
+    }
+
+    @Test
+    @DisplayName("bare /ping from the console shows only the server line")
+    void pingConsole() {
+        CommandSender console = mock(CommandSender.class);
+        when(console.hasPermission(Mockito.anyString())).thenReturn(true);
+
+        handler.onCommand(console, command("ping"), "ping", new String[]{});
+
+        ArgumentCaptor<String> sent = ArgumentCaptor.forClass(String.class);
+        verify(console).sendMessage(sent.capture());
+        assertTrue(sent.getValue().contains("TPS"));
+    }
+
+    @Test
+    @DisplayName("ping/TPS/MSPT colours change at the documented thresholds")
+    void pingColourThresholds() {
+        assertEquals(ChatColor.GREEN, PluginCommandHandler.pingColor(99));
+        assertEquals(ChatColor.YELLOW, PluginCommandHandler.pingColor(100));
+        assertEquals(ChatColor.RED, PluginCommandHandler.pingColor(250));
+        assertEquals(ChatColor.GREEN, PluginCommandHandler.tpsColor(18.0));
+        assertEquals(ChatColor.YELLOW, PluginCommandHandler.tpsColor(15.0));
+        assertEquals(ChatColor.RED, PluginCommandHandler.tpsColor(14.9));
+        assertEquals(ChatColor.GREEN, PluginCommandHandler.msptColor(40.0));
+        assertEquals(ChatColor.YELLOW, PluginCommandHandler.msptColor(50.0));
+        assertEquals(ChatColor.RED, PluginCommandHandler.msptColor(50.1));
     }
 }

@@ -282,6 +282,49 @@ class AuthServiceAuthWorldTest {
         assertFalse(authLocations.hasOrigin(player.getUniqueId()));
     }
 
+    // ----- dying while frozen -----
+
+    @Test
+    @DisplayName("a player frozen on the death screen respawns in the auth world, not the overworld")
+    void deadOnFreezeRespawnsInAuthWorld() {
+        player.teleport(new Location(overworld, 1500.5, 70.0, -2200.5));
+        player.setHealth(0);
+        AuthService auth = service();
+        auth.getGameModeMap().put(player.getUniqueId(), GameMode.SURVIVAL);
+
+        // Rejoined from a new network while still on the death screen.
+        auth.freezePlayer(player);
+        Location bed = new Location(overworld, 10.5, 64.0, 20.5);
+        Location respawn = auth.redirectRespawn(player, bed);
+
+        assertEquals(AUTH_WORLD, respawn.getWorld().getName(), "must respawn inside the auth world");
+        Location remembered = authLocations.getOrigin(player.getUniqueId());
+        assertEquals(10.5, remembered.getX(), "on /sync they go where they would have respawned");
+        assertEquals(20.5, remembered.getZ());
+        assertEquals(GameMode.SURVIVAL, authLocations.getGameMode(player.getUniqueId()),
+                "the real gamemode must survive the location swap");
+    }
+
+    @Test
+    @DisplayName("a frozen player who dies inside the auth world respawns there and keeps their origin")
+    void deathInAuthWorldKeepsOrigin() {
+        player.teleport(new Location(overworld, 1500.5, 70.0, -2200.5));
+        AuthService auth = service();
+        auth.freezePlayer(player);
+
+        Location respawn = auth.redirectRespawn(player, new Location(overworld, 10.5, 64.0, 20.5));
+
+        assertEquals(AUTH_WORLD, respawn.getWorld().getName());
+        assertEquals(1500.5, authLocations.getOrigin(player.getUniqueId()).getX(),
+                "dying in the chamber must not overwrite the real origin");
+    }
+
+    @Test
+    @DisplayName("an authenticated player's respawn is left alone")
+    void authenticatedRespawnUntouched() {
+        assertNull(service().redirectRespawn(player, new Location(overworld, 10.5, 64.0, 20.5)));
+    }
+
     @Test
     @DisplayName("a player stranded in the auth world with no record is rescued to spawn")
     void strandedPlayerRescued() {

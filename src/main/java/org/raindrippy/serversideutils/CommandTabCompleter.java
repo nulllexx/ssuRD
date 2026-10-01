@@ -5,6 +5,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -79,6 +80,12 @@ public class CommandTabCompleter implements TabCompleter {
                     return placeholder("<password>");
                 }
                 return Collections.emptyList();
+            // /ping [player] -- other players only for those allowed to check them
+            case "ping":
+                if (args.length == 1 && sender.hasPermission("serversideutils.ping.others")) {
+                    return getOnlinePlayerNames(args[0]);
+                }
+                return Collections.emptyList();
             case "removestrike":
                 if (args.length == 1) {
                     return getAllPlayerNames(args[0]);
@@ -104,6 +111,16 @@ public class CommandTabCompleter implements TabCompleter {
             }
         }
         return matches;
+    }
+
+    private List<String> getOnlinePlayerNames(String prefix) {
+        List<String> names = new ArrayList<>();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (p.getName().toLowerCase().startsWith(prefix.toLowerCase())) {
+                names.add(p.getName());
+            }
+        }
+        return names;
     }
 
     private List<String> getAllPlayerNames(String prefix) {

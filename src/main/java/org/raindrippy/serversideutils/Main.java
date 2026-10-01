@@ -128,20 +128,27 @@ public class Main extends JavaPlugin {
 
         if (configManager.isTrackingEnabled()) configManager.savePlayerCount();
 
+        TickMonitor tickMonitor = new TickMonitor(System::nanoTime,
+                TickMonitor.resolveMsptSource(getServer(), getLogger()));
+        tickMonitor.start(this);
+        getLogger().info("MSPT source for /ping: " + tickMonitor.getMsptSourceName());
+
         PluginCommandHandler commandHandler = new PluginCommandHandler(
                 warningsManager, scoreboardService, configManager, pendingPaymentsManager,
-                combatLogManager, credentialsManager, authService, econ, DIGITAL_ECONOMY_ENABLED);
+                combatLogManager, credentialsManager, authService, econ, DIGITAL_ECONOMY_ENABLED,
+                tickMonitor);
 
         CommandTabCompleter tabCompleter = new CommandTabCompleter();
         for (String cmd : new String[]{
                 "eventhub", "return", "togglescoreboard", "sendmoney",
                 "warn", "getwarnings", "removewarning", "clearwarnings",
                 "owarn", "oclearwarnings", "oremovewarning",    
-                "setcounter", "lsrev", "sync", "unlink", "removestrike"}) {
+                "setcounter", "lsrev", "sync", "unlink", "removestrike", "ping"}) {
             this.getCommand(cmd).setExecutor(commandHandler);
             this.getCommand(cmd).setTabCompleter(tabCompleter);
         }
 
+        warnIfPingShadowed();
         installCommandLogFilter();
 
         new BukkitRunnable() {
@@ -192,6 +199,20 @@ public class Main extends JavaPlugin {
         if (combatLogManager != null) combatLogManager.save();
         if (pendingPaymentsManager != null) pendingPaymentsManager.save();
         if (authLocationsManager != null) authLocationsManager.save();
+    }
+
+    /**
+     * Essentials ships a joke /ping ("Pong!"). If it still owns the bare label, ours is only
+     * reachable as /serversideutils:ping -- say so, since the fix is in Essentials' config.
+     */
+    private void warnIfPingShadowed() {
+        org.bukkit.command.PluginCommand owner = Bukkit.getPluginCommand("ping");
+        if (owner == null || owner.getPlugin() != this) {
+            getLogger().warning("/ping is owned by "
+                    + (owner == null ? "another plugin" : owner.getPlugin().getName())
+                    + ", not ServerSideUtils. Add 'ping' to disabled-commands in "
+                    + "plugins/Essentials/config.yml so players get the real ping command.");
+        }
     }
 
     /**
