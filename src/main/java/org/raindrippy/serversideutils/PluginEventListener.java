@@ -23,13 +23,19 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.projectiles.ProjectileSource;
 import org.json.simple.JSONObject;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
+import java.util.stream.Stream;
+import java.awt.Color;
 
 public class PluginEventListener implements Listener {
     private final Main plugin;
@@ -78,6 +84,57 @@ public class PluginEventListener implements Listener {
         this.networkGuard = new NetworkGuard(cryptoService);
     }
 
+    private String encaseMessage(String message, int occasionNo) {
+        StringBuilder sb = new StringBuilder(), encasingLinesSB = new StringBuilder();
+        sb.append("[");
+        for (int i = 0; i < 32; i++) {
+            switch (occasionNo) {
+                case 1: // New Year
+                    // repeat gold black & silver for 32
+                    switch (i % 3) {
+                        case 0 -> encasingLinesSB.append(ChatColor.GOLD).append("=");
+                        case 1 -> encasingLinesSB.append(ChatColor.BLACK).append("=");
+                        case 2 -> encasingLinesSB.append(ChatColor.GRAY).append("=");
+                    }
+                    break;
+                case 2: // Christmas
+                    // repeat red green & white for 32
+                    switch (i % 3) {
+                        case 0 -> encasingLinesSB.append(ChatColor.RED).append("=");
+                        case 1 -> encasingLinesSB.append(ChatColor.GREEN).append("=");
+                        case 2 -> encasingLinesSB.append(ChatColor.WHITE).append("=");
+                    }
+                    break;
+                case 3: // Pride Month
+                    float hue = (float) i / 27; // 27 steps for main rainbow, allocating last 5 for trans flag colors
+                    int rgb = Color.HSBtoRGB(hue, 1f, 1f);
+                    String hex = String.format("%06x", rgb & 0xFFFFFF);
+                    encasingLinesSB.append(ChatColor.COLOR_CHAR).append('x');
+                    for (char digit : hex.toCharArray())
+                        encasingLinesSB.append(ChatColor.COLOR_CHAR).append(digit);
+                    encasingLinesSB.append("=");
+                    break;
+                default: // generic encasing for unknown occasions
+                    encasingLinesSB.append(ChatColor.DARK_GRAY).append("-");
+                    break;
+            }
+            if (occasionNo == 3 && i == 27) {
+                // add the trans flag colors after the rainbow in = characters
+                // light blue + =, pink + =, white + =, pink + =, light blue + =
+                encasingLinesSB.append(ChatColor.COLOR_CHAR).append('x').append(ChatColor.COLOR_CHAR).append('5').append(ChatColor.COLOR_CHAR).append('b').append(ChatColor.COLOR_CHAR).append('c').append(ChatColor.COLOR_CHAR).append('e').append(ChatColor.COLOR_CHAR).append('f').append(ChatColor.COLOR_CHAR).append('a').append('=');
+                encasingLinesSB.append(ChatColor.COLOR_CHAR).append('x').append(ChatColor.COLOR_CHAR).append('f').append(ChatColor.COLOR_CHAR).append('5').append(ChatColor.COLOR_CHAR).append('a').append(ChatColor.COLOR_CHAR).append('9').append(ChatColor.COLOR_CHAR).append('b').append(ChatColor.COLOR_CHAR).append('8').append('=');
+                encasingLinesSB.append(ChatColor.WHITE).append("="); // no hex nonsense for white, just use ChatColor.WHITE
+                encasingLinesSB.append(ChatColor.COLOR_CHAR).append('x').append(ChatColor.COLOR_CHAR).append('f').append(ChatColor.COLOR_CHAR).append('5').append(ChatColor.COLOR_CHAR).append('a').append(ChatColor.COLOR_CHAR).append('9').append(ChatColor.COLOR_CHAR).append('b').append(ChatColor.COLOR_CHAR).append('8').append('=');
+                encasingLinesSB.append(ChatColor.COLOR_CHAR).append('x').append(ChatColor.COLOR_CHAR).append('5').append(ChatColor.COLOR_CHAR).append('b').append(ChatColor.COLOR_CHAR).append('c').append(ChatColor.COLOR_CHAR).append('e').append(ChatColor.COLOR_CHAR).append('f').append(ChatColor.COLOR_CHAR).append('a').append('=');
+            }
+        }
+        String encasingLines = encasingLinesSB.toString();
+        sb.append(encasingLines).append("]\n\n");
+        sb.append(ChatColor.GRAY).append(message).append("\n\n");
+        sb.append("[").append(encasingLines).append("]");
+        return sb.toString();
+    }
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
@@ -85,6 +142,37 @@ public class PluginEventListener implements Listener {
         GameMode mode = player.getGameMode();
         authService.getGameModeMap().put(playerUUID, mode);
         scoreboardService.enable(player);
+
+        // Special chat messages depending on date, as a nice touch for special occasions
+        switch (Calendar.getInstance().get(Calendar.MONTH)) {
+            case Calendar.JANUARY:
+                if (Calendar.getInstance().get(Calendar.DAY_OF_MONTH) == 1) {
+                    player.sendMessage(encaseMessage("Happy New Year!", 1));
+                }
+                break;
+            case Calendar.DECEMBER:
+                if (Calendar.getInstance().get(Calendar.DAY_OF_MONTH) == 25) {
+                    player.sendMessage(encaseMessage("Merry Christmas!", 2));
+                }
+                break;
+            case Calendar.JUNE:
+                // check for mekanism mod - they have their own for this and we dont want to overlap
+                // jar must contain "mekanism" in the name & end with .jar (we might have it as .bak in some seasons)
+                Path modsDirectory = Bukkit.getWorldContainer().toPath().resolve("mods");
+                if (Files.exists(modsDirectory)) {
+                    try (Stream<Path> mods = Files.list(modsDirectory)) {
+                        if (mods.anyMatch(path -> path.getFileName().toString().toLowerCase().contains("mekanism")
+                                && path.getFileName().toString().toLowerCase().endsWith(".jar")))
+                            player.sendMessage(encaseMessage("Happy Pride Month!", 3));
+                    } catch (IOException e) {
+                        plugin.getLogger().log(Level.WARNING, "Unable to check for the Mekanism mod", e);
+                    }
+                }
+                break;
+
+            default:
+                break;
+        }
 
         if (combatLogManager.isPending(playerUUID)) {
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
