@@ -67,8 +67,8 @@ public class NetworkGuard {
     public boolean isKnown(JSONObject credentials, String fingerprint) {
         if (credentials == null || fingerprint == null) return false;
         Object stored = credentials.get(KNOWN_NETWORKS_KEY);
-        if (!(stored instanceof JSONArray)) return false;
-        for (Object known : (JSONArray) stored) {
+        if (!(stored instanceof java.util.List<?>)) return false;
+        for (Object known : (java.util.List<?>) stored) {
             if (fingerprint.equals(known)) return true;
         }
         return false;
@@ -83,7 +83,7 @@ public class NetworkGuard {
         if (credentials == null || fingerprint == null) return;
 
         Object stored = credentials.get(KNOWN_NETWORKS_KEY);
-        JSONArray known = (stored instanceof JSONArray) ? (JSONArray) stored : new JSONArray();
+        java.util.List<?> known = (stored instanceof java.util.List<?>) ? (java.util.List<?>) stored : java.util.Collections.emptyList();
 
         JSONArray updated = new JSONArray();
         updated.add(fingerprint);
