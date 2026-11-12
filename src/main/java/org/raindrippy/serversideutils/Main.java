@@ -25,8 +25,12 @@ public class Main extends JavaPlugin {
     private static final String ADMIN_USER = dotenv.get("ADMIN_USER");
     private static final String ADMIN_PWD = dotenv.get("ADMIN_PWD");
 
-    private static final int SEASON = 9;
-    private static final String THEME = "S8 reboot";
+    /**
+     * Used only when {@code plugins/ServerSideUtils/season-override.json} is missing or invalid. The
+     * admin panel's "End season" writes that file for the next season, so these need not change.
+     */
+    private static final int DEFAULT_SEASON = 9;
+    private static final String DEFAULT_THEME = "S8 reboot";
     private static final boolean DIGITAL_ECONOMY_ENABLED = false;
     /**
      * Commands whose echo is kept out of the console and log files by {@link CommandLogFilter} --
@@ -85,13 +89,23 @@ public class Main extends JavaPlugin {
 
         configManager = new ConfigManager(this);
 
+        SeasonOverride season = SeasonOverride.load(getDataFolder(), DEFAULT_SEASON, DEFAULT_THEME,
+                getLogger());
+
+        // Before anything that can disable the plugin: the panel's "End season" reads this even
+        // when, say, Vault is missing.
+        SeasonInfoPublisher.publish(getDataFolder(), season.getSeason(), season.getTheme(),
+                Bukkit.getBukkitVersion(),
+                Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0).getName(), getLogger());
+
         if (!setupEconomy()) {
             getLogger().severe("Vault economy not found! Disabling plugin.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
-        scoreboardService = new ScoreboardService(econ, DIGITAL_ECONOMY_ENABLED, SEASON, THEME);
+        scoreboardService = new ScoreboardService(econ, DIGITAL_ECONOMY_ENABLED, season.getSeason(),
+                season.getTheme());
         if (scoreboardService.getManager() == null) {
             getLogger().severe("ScoreboardManager is null! Disabling plugin.");
             getServer().getPluginManager().disablePlugin(this);
